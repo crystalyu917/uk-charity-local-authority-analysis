@@ -1,166 +1,134 @@
-# UK charity local authority analysis
+﻿# UK charity local authority analysis
 
-Run these commands in PowerShell from the repository root. Install `uv` first;
-`uv run` installs the project's Python 3.14 environment and dependencies as needed.
+Build a charity register from Charity Commission, Companies House, Find That
+Charity, and ONS postcode data, then aggregate removals by local authority.
 
-Start by choosing your inputs in
+## Configure inputs
+
+All data paths and download settings live in
 [`core/config.py`](src/uk_charity_local_authority_analysis/core/config.py).
-The examples below use the default paths; your configured paths take precedence.
+Edit this file, save it, and rerun the command. Restart Python if using a notebook.
 
-## ONS download
-
-Download the configured ONS Postcode Directory ZIP into `data\core\ons\raw`:
-
-```powershell
-uv run python -m uk_charity_local_authority_analysis.core.datasets.ons_postcode_lookup download
-```
-
-The current endpoint is the [May 2026 ONS Postcode Directory](https://geoportal.statistics.gov.uk/datasets/6fff67d204fd4f339591ed667a6e3642/about).
-The ZIP is approximately 247 MB. Paths are resolved from the repository location.
-
-Download and extract only the combined postcode CSV and the LAD and region lookups:
-
-```powershell
-uv run python -m uk_charity_local_authority_analysis.core.datasets.ons_postcode_lookup extract
-```
-
-Download, extract, and build `data\core\ons\raw\ons_postcode_lookup.parquet`:
-
-```powershell
-uv run python -m uk_charity_local_authority_analysis.core.datasets.ons_postcode_lookup build
-```
-
-Omitting the action also runs `build`. The Parquet contains `pcd`, `lad`
-(code and name), and `region` (code and name). Source files stay under
-`data\core\ons\raw\ONSPD_MAY_2026`.
-
-Existing downloads and completed Parquet outputs are reused. Extracted files
-are reused when their sizes match the ZIP metadata. To refresh an existing
-download, remove its ZIP first; to rebuild an existing Parquet, remove that
-Parquet first. Interrupted downloads use temporary files and do not replace
-the final ZIP.
-
-## Data configuration
-
-Edit [`core/config.py`](src/uk_charity_local_authority_analysis/core/config.py)
-for all source directories, input filenames, output paths, and the ONS download
-endpoint. Save the file and rerun the command (restart Python in a notebook).
-You do not need to edit `charity.py`, `constants.py`, or `endpoint.py`.
-
-| What to change | Settings in `core/config.py` |
+| Source or output | Settings |
 | --- | --- |
-| Charity Commission input folder | `CHARITY_COMMISSION_DIR` |
-| Charity and classification CSVs | `CHARITY`, `CHARITY_CLASSIFICATION` |
-| Companies House input | `COMPANY_HOUSE_DIR`, `COMPANY_HOUSE` |
-| Find That Charity input | `FIND_THAT_CHARITY_DIR`, `FIND_THAT_CHARITY` |
-| ONS download URL | `ONS_POSTCODE_LOOKUP_ITEM_ID`, `ONS_POSTCODE_LOOKUP_URL` |
-| ONS ZIP location | `ONS_RAW_DIR`, `ONS_POSTCODE_LOOKUP_FILENAME` |
-| Optional local ONS CSV | `ONS_SOURCE_CSV` |
-| Generated Parquet files | `ONS_OUTPUT_PATH`, `CHARITY_OUTPUT_PATH` |
+| Charity Commission | `CHARITY_COMMISSION_DIR`, `CHARITY`, `CHARITY_CLASSIFICATION` |
+| Companies House | `COMPANY_HOUSE_DIR`, `COMPANY_HOUSE` |
+| Find That Charity | `FIND_THAT_CHARITY_DIR`, `FIND_THAT_CHARITY` |
+| ONS download | `ONS_POSTCODE_LOOKUP_ITEM_ID`, `ONS_POSTCODE_LOOKUP_URL`, `ONS_POSTCODE_LOOKUP_FILENAME` |
+| ONS local files | `ONS_RAW_DIR`, `ONS_SOURCE_CSV`, `ONS_OUTPUT_PATH` |
+| Register output basename | `CHARITY_OUTPUT_PATH` |
 
-`legacy_raw` is simply the default folder name, not a required data mode.
-Set each directory and filename to the data you want to use.
-
-For example, use a non-legacy Charity Commission directory:
+The defaults select May 2025 CSVs in each source's `legacy_raw` folder and the
+May 2026 ONS release. Supply the CSVs locally; only ONS has a downloader.
+To choose different data, change the directory and filenames together:
 
 ```python
 CHARITY_COMMISSION_DIR = DEFAULT_DATA_DIR / "charity_commission" / "raw"
 CHARITY = CHARITY_COMMISSION_DIR / "charity_commission_latest.csv"
 CHARITY_CLASSIFICATION = CHARITY_COMMISSION_DIR / "charity_classification_latest.csv"
-```
 
-Or use an external directory:
-
-```python
+# Absolute directories also work.
 COMPANY_HOUSE_DIR = Path("D:/datasets/companies")
 COMPANY_HOUSE = COMPANY_HOUSE_DIR / "companies.csv"
 ```
 
-Relative paths should be anchored to `PROJECT_ROOT`; absolute paths work too.
-The selected CSVs must have the columns expected by the existing pipeline.
+Anchor repo-relative paths to `PROJECT_ROOT` or `DEFAULT_DATA_DIR`. Replacement
+CSVs must retain the columns expected by the pipeline.
 
-In the same file, set `ONS_POSTCODE_LOOKUP_ITEM_ID` (or replace
-`ONS_POSTCODE_LOOKUP_URL` with a direct download URL),
-`ONS_POSTCODE_LOOKUP_FILENAME`, and `ONS_RAW_DIR`. For a different release, also
-change `ONS_OUTPUT_PATH` or remove the old Parquet to avoid reusing its cache.
-For example, the default ONS settings in that file are:
+For ONS, change the item ID or supply a direct compatible ZIP URL. Keep the ZIP
+filename aligned with the release. Downloads and ONS Parquet files are cached:
+use new filenames/paths or remove the old cached files when switching releases.
+Extracted CSVs are reused when their sizes match the archive metadata.
 
-```python
-ONS_RAW_DIR = DEFAULT_DATA_DIR / "ons" / "raw"
-ONS_POSTCODE_LOOKUP_ITEM_ID = "6fff67d204fd4f339591ed667a6e3642"
-ONS_POSTCODE_LOOKUP_URL = (
-    "https://www.arcgis.com/sharing/rest/content/items/"
-    f"{ONS_POSTCODE_LOOKUP_ITEM_ID}/data"
-)
-ONS_POSTCODE_LOOKUP_FILENAME = "ONSPD_MAY_2026.zip"
-ONS_OUTPUT_PATH = ONS_RAW_DIR / "ons_postcode_lookup.parquet"
-```
+Leave `ONS_SOURCE_CSV = None` to use the archive and geography name lookups, or
+set it to a local CSV path. A configured CSV rebuilds the ONS Parquet on each
+build and supplies geography codes with null names; it does not affect the
+`download` and `extract` commands.
 
-Keep the item ID and ZIP filename aligned with your chosen release. A replacement
-URL must serve a compatible ONS ZIP archive, not a dataset landing page.
-ONS is currently the only implemented downloader; the other sources use local CSVs.
+## Run
 
-Set `ONS_SOURCE_CSV` to a CSV path to build from that file, or leave it as `None`
-to use the official ZIP and its LAD/region name lookups. A configured CSV must
-exist and rebuilds the Parquet on every build, with null geography names.
-An explicitly supplied `source_csv` function argument overrides the configuration.
+Install `uv`, then run these PowerShell commands from the repository root.
+`uv run` sets up Python 3.14 and the project dependencies as needed.
 
-```python
-ONS_SOURCE_CSV = Path("D:/datasets/ons/postcodes.csv")
-```
-
-This setting affects `build`; `download` and `extract` still use the configured
-ZIP endpoint. After changing configuration, run the same build commands shown
-below; no extra command-line options are needed.
-
-## Integrated charity register
-
-Build the register from this repository's local snapshots:
+Build the complete charity register (builds the ONS lookup if needed):
 
 ```powershell
 uv run python -m uk_charity_local_authority_analysis.core
 ```
 
-Default output: `data\core\output\charity_register.parquet` (`CHARITY_OUTPUT_PATH`). Each run rebuilds this
-output, replacing it only after the new Parquet is complete. The default input paths are:
+To run ONS preparation separately:
 
-- `data\core\charity_commission\legacy_raw\charity_commission_28052025.csv`
-- `data\core\charity_commission\legacy_raw\charity_classification_28052025.csv`
-- `data\core\company_house\legacy_raw\company_house_28052025.csv`
-- `data\core\find_that_charity\legacy_raw\find_that_charity_28052025.csv`
-
-Supply the selected CSVs locally; the pipeline does not download them.
-The ONS Parquet is built automatically if missing. Input locations are configured
-in [`core/config.py`](src/uk_charity_local_authority_analysis/core/config.py).
-
-The register covers England and Wales Charity Commission records. It uses main
-charity records (`linked_charity_number = 0`), restricts Find That Charity to
-`ccew`, and validates joins to prevent duplicate lookup records multiplying rows.
-Company identifiers remain strings with numeric identifiers padded to eight
-characters. Companies House is scanned for matching company numbers before
-loading the relevant records. Postcode precedence is Companies House, Charity
-Commission, then Find That Charity; postcodes without an ONS match retain a null
-local authority code. Classification flags include linked-fund classifications
-under their parent charity and are zero when absent.
-
-The default configuration selects May 2025 snapshots and May 2026 ONS
-geographies. This is a snapshot analysis, not a historical geography reconstruction.
-Financial years start in April; income bands are Small below 25,000, Medium from
-25,000 through 1,000,000, and Large above 1,000,000. Missing income is unclassified.
-
-To aggregate removals by local authority, financial year, and size:
-
-```python
-from uk_charity_local_authority_analysis.core.charity import scan_charity_removals
-
-removals = scan_charity_removals().collect()
+```powershell
+uv run python -m uk_charity_local_authority_analysis.core.datasets.ons_postcode_lookup download
 ```
 
-Rows without a local authority or removal year are excluded from this aggregation.
+| Action | Result under the default `data\core\ons\raw` directory |
+| --- | --- |
+| `download` | Download the ONS ZIP |
+| `extract` | Download and extract the postcode, LAD, and region CSVs |
+| `build` (default if omitted) | Create `ons_postcode_lookup.parquet` with postcode, LAD, and region codes/names |
 
-## Checks
+## Outputs and run records
 
-Run the offline regression checks with:
+Each successful register build saves two files beside the configured
+`CHARITY_OUTPUT_PATH`. By default:
+
+```text
+data/core/output/
+  charity_register_20260906_143025_123456Z.parquet
+  charity_register_20260906_143025_123456Z.run.json
+```
+
+The suffix is the run's UTC start time, including microseconds (`Z` means UTC).
+Previous runs are preserved, including when timestamps collide. The command
+prints the Parquet path and logs the JSON path.
+
+The JSON records:
+
+- UTC start and completion times.
+- Input dataset paths, sizes, and modification timestamps.
+- ONS source mode (cached lookup, local CSV, or archive) and configured endpoint.
+- Saved Parquet path, size, and row/column counts.
+
+Records describe successful builds only; older outputs are not backfilled.
+They contain file metadata, not copies or hashes of the inputs. A configured
+ONS endpoint does not establish the origin of an existing cached lookup.
+If record publication fails, the new Parquet is removed and the build reports
+an error.
+
+## Analyse removals
+
+```python
+from pathlib import Path
+from uk_charity_local_authority_analysis.core.charity import scan_charity_removals
+
+# Latest timestamped run; falls back to the old unsuffixed file if necessary.
+removals = scan_charity_removals().collect()
+
+# Or select a specific run.
+removals = scan_charity_removals(
+    Path("data/core/output/charity_register_20260906_143025_123456Z.parquet")
+).collect()
+```
+
+Results group removals by local authority, financial year, and size. Rows without
+a local authority or removal year are excluded.
+
+The pipeline uses these conventions:
+
+- England and Wales main charity records (`linked_charity_number = 0`), with
+  Find That Charity restricted to `ccew`. Linked-fund classifications contribute
+  to the parent charity; absent classification flags are zero.
+- Company numbers remain strings, with numeric identifiers padded to eight
+  characters. Joins validate lookup uniqueness to avoid multiplying rows.
+- Postcode priority: Companies House, Charity Commission, then Find That Charity.
+  Unmatched postcodes retain a null local authority code.
+- Financial years start in April. Income bands: Small below 25,000; Medium from
+  25,000 through 1,000,000; Large above 1,000,000. Missing income is unclassified.
+- Geography comes from the configured ONS release, rather than being reconstructed
+  for each historical removal date.
+
+## Tests
 
 ```powershell
 uv run python -m unittest discover -s tests -v
