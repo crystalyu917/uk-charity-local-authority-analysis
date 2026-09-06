@@ -21,6 +21,7 @@ CHARITY = CHARITY_COMMISSION_DIR / "charity_commission_28052025.csv"
 CHARITY_CLASSIFICATION = CHARITY_COMMISSION_DIR / "charity_classification_28052025.csv"
 COMPANY_HOUSE = COMPANY_HOUSE_DIR / "company_house_28052025.csv"
 FIND_THAT_CHARITY = FIND_THAT_CHARITY_DIR / "find_that_charity_28052025.csv"
+# Base filename: each build appends _YYYYMMDD_HHMMSS_microsecondsZ (UTC).
 CHARITY_OUTPUT_PATH = OUTPUT_DIR / "charity_register.parquet"
 
 # ONS is currently the only source with an implemented downloader.

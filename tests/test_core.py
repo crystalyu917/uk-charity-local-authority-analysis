@@ -1,7 +1,8 @@
 """Integration regressions for the charity snapshot pipeline."""
 
 import unittest
-from datetime import date
+import json
+from datetime import date, datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -91,6 +92,57 @@ class CharityPipelineTests(unittest.TestCase):
                         core.build_charity_register(path)
             self.assertEqual(path.read_bytes(), b"previous output")
             self.assertEqual(list(Path(directory).iterdir()), [path])
+
+    def test_runs_preserve_history_even_with_identical_timestamps(self):
+        with TemporaryDirectory() as directory:
+            base = Path(directory) / "register.parquet"
+            base.write_bytes(b"old register")
+            data = pl.DataFrame({
+                "local_authority_code": ["LAD1"], "removal_fy": [2024],
+                "size_category": ["Small"],
+            })
+            with patch.object(core, "datetime") as clock:
+                clock.now.return_value = datetime(2026, 9, 6, 14, 30, 25, 123456, tzinfo=timezone.utc)
+                with patch.object(core, "load_charity_register", return_value=data):
+                    first = core.build_charity_register(base)
+                    second = core.build_charity_register(base)
+            self.assertEqual(first.name, "register_20260906_143025_123456Z.parquet")
+            self.assertEqual(second.name, "register_20260906_143025_123457Z.parquet")
+            self.assertTrue(pl.read_parquet(first).equals(data))
+            self.assertTrue(pl.read_parquet(second).equals(data))
+            self.assertEqual(base.read_bytes(), b"old register")
+            record = json.loads(second.with_suffix(".run.json").read_text())
+            self.assertEqual(record["output"]["path"], str(second.resolve()))
+            self.assertEqual(record["output"]["rows"], 1)
+            self.assertEqual(record["output"]["size_bytes"], second.stat().st_size)
+            self.assertEqual(record["inputs"]["charity_commission"]["path"], str(core.CHARITY.resolve()))
+            self.assertEqual(record["ons"]["configured_download_url"], core.ons_datasets.ONS_POSTCODE_LOOKUP_URL)
+            self.assertTrue(first.with_suffix(".run.json").is_file())
+            self.assertEqual(core.latest_charity_register(base), second)
+            with patch.object(core, "DEFAULT_OUTPUT_PATH", base):
+                self.assertEqual(core.scan_charity_removals().collect()["removals"][0], 1)
+
+    def test_latest_run_falls_back_and_reports_missing_output(self):
+        with TemporaryDirectory() as directory:
+            base = Path(directory) / "register.parquet"
+            with self.assertRaises(FileNotFoundError):
+                core.latest_charity_register(base)
+            base.write_bytes(b"old register")
+            self.assertEqual(core.latest_charity_register(base), base)
+
+    def test_record_failure_does_not_leave_unrecorded_output(self):
+        with TemporaryDirectory() as directory:
+            base = Path(directory) / "register.parquet"
+            real_link = core.os.link
+            def link(source, destination):
+                if str(destination).endswith(".run.json"):
+                    raise OSError("record publication failed")
+                return real_link(source, destination)
+            with patch.object(core, "load_charity_register", return_value=pl.DataFrame({"id": [1]})):
+                with patch.object(core.os, "link", side_effect=link):
+                    with self.assertRaises(OSError):
+                        core.build_charity_register(base)
+            self.assertEqual(list(Path(directory).iterdir()), [])
 
 
 if __name__ == "__main__":

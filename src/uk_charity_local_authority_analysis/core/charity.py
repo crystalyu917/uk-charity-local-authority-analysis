@@ -1,6 +1,10 @@
 """Build an England and Wales charity register from the local source snapshots."""
 
+from datetime import datetime, timedelta, timezone
 from logging import getLogger
+import json
+import os
+import re
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -17,6 +21,7 @@ from uk_charity_local_authority_analysis.core.config import (
 from uk_charity_local_authority_analysis.core.datasets.ons_postcode_lookup.datasets import (
     build_ons_postcode_lookup,
 )
+from uk_charity_local_authority_analysis.core.datasets.ons_postcode_lookup import datasets as ons_datasets
 
 logger = getLogger(__name__)
 
@@ -402,21 +407,113 @@ def load_charity_register(
 def build_charity_register(
     output_path: Path = DEFAULT_OUTPUT_PATH,
 ) -> Path:
-    """Build the integrated charity register and save it as Parquet."""
+    """Save a new run, appending its UTC start time to the configured basename."""
+    run_time = datetime.now(timezone.utc)
+    started_at = run_time.isoformat()
+    inputs = {
+        name: _file_record(path) for name, path in {
+            "charity_commission": CHARITY,
+            "charity_classification": CHARITY_CLASSIFICATION,
+            "companies_house": COMPANY_HOUSE,
+            "find_that_charity": FIND_THAT_CHARITY,
+        }.items()
+    }
+    ons_mode = (
+        "standalone_csv" if ons_datasets.ONS_SOURCE_CSV is not None
+        else "cached_parquet" if ONS.is_file()
+        else "archive"
+    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     register = load_charity_register()
+    inputs["ons_lookup"] = _file_record(ONS)
+    if ons_mode == "standalone_csv":
+        inputs["ons_source_csv"] = _file_record(ons_datasets.ONS_SOURCE_CSV)
+    elif ons_mode == "archive":
+        inputs["ons_archive"] = _file_record(
+            ons_datasets.DEFAULT_RAW_DIR / ons_datasets.ONS_POSTCODE_LOOKUP_FILENAME
+        )
     with TemporaryDirectory(dir=output_path.parent, prefix=".charity-register-") as directory:
         temporary_path = Path(directory) / output_path.name
         register.write_parquet(temporary_path)
-        temporary_path.replace(output_path)
-    logger.info("Wrote %s charities to %s", register.height, output_path)
-    return output_path
+        while True:
+            timestamp = run_time.strftime("%Y%m%d_%H%M%S_%fZ")
+            saved_path = output_path.with_name(
+                f"{output_path.stem}_{timestamp}{output_path.suffix}"
+            )
+            record_path = saved_path.with_suffix(".run.json")
+            record = {
+                "schema_version": 1,
+                "started_at_utc": started_at,
+                "completed_at_utc": datetime.now(timezone.utc).isoformat(),
+                "inputs": inputs,
+                "ons": {
+                    "mode": ons_mode,
+                    "configured_download_url": ons_datasets.ONS_POSTCODE_LOOKUP_URL,
+                    "configured_archive_filename": ons_datasets.ONS_POSTCODE_LOOKUP_FILENAME,
+                    "note": "Configured endpoint is not verified provenance for an existing cached lookup.",
+                },
+                "output": {
+                    "path": str(saved_path.resolve()),
+                    "size_bytes": temporary_path.stat().st_size,
+                    "rows": register.height,
+                    "columns": register.width,
+                },
+            }
+            temporary_record = Path(directory) / "run.json"
+            temporary_record.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+            try:
+                # Publish the completed file atomically without replacing any run.
+                os.link(temporary_path, saved_path)
+            except FileExistsError:
+                run_time += timedelta(microseconds=1)
+                continue
+            try:
+                os.link(temporary_record, record_path)
+            except FileExistsError:
+                saved_path.unlink()
+                run_time += timedelta(microseconds=1)
+                continue
+            except OSError:
+                saved_path.unlink()
+                raise
+            break
+    logger.info("Wrote %s charities to %s", register.height, saved_path)
+    logger.info("Run record: %s", record_path)
+    return saved_path
+
+
+def _file_record(path: Path) -> dict:
+    """Record the selected file and its filesystem version without rereading it."""
+    record = {"path": str(path.resolve()), "exists": path.is_file()}
+    if record["exists"]:
+        info = path.stat()
+        record.update(size_bytes=info.st_size, modified_time_ns=info.st_mtime_ns)
+    return record
+
+
+def latest_charity_register(output_path: Path | None = None) -> Path:
+    """Find the latest timestamped run, falling back to the old unsuffixed file."""
+    base = output_path if output_path is not None else DEFAULT_OUTPUT_PATH
+    pattern = re.compile(
+        rf"{re.escape(base.stem)}_\d{{8}}_\d{{6}}_\d{{6}}Z{re.escape(base.suffix)}"
+    )
+    runs = [
+        path for path in base.parent.iterdir()
+        if path.is_file() and pattern.fullmatch(path.name)
+    ] if base.parent.is_dir() else []
+    if runs:
+        return max(runs, key=lambda path: path.name)
+    if base.is_file():
+        return base
+    raise FileNotFoundError(f"No charity register found in {base.parent}; run the core build first")
 
 
 def scan_charity_removals(
-    data_path: Path = DEFAULT_OUTPUT_PATH,
+    data_path: Path | None = None,
 ) -> pl.LazyFrame:
-    """Aggregate removed charities by LAD25, financial year, and size."""
+    """Aggregate removals from an explicit file or the latest saved run."""
+    if data_path is None:
+        data_path = latest_charity_register()
     return (
         pl.scan_parquet(data_path)
         .filter(
