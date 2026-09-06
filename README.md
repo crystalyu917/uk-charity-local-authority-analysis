@@ -130,6 +130,8 @@ The pipeline uses these conventions:
 
 ## Tests
 
+Tests live in `tests/` subfolders of their relevant modules under `src/`.
+
 ```powershell
-uv run python -m unittest discover -s tests -v
+uv run python -m unittest discover -s src -v
 ```
