@@ -25,14 +25,31 @@ under `data/`, and common dataset formats are excluded from Git.
 
 ## Module guides
 
-| Module | Guide | Default data directory |
-| --- | --- | --- |
-| Core | [Inputs, charity register builds, ONS lookup, and run records](src/uk_charity_local_authority_analysis/core/README.md) | `data/core/` |
+| Module              | Guide                                                                                                                               | Default data directory      |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| Core                | [Inputs, charity register builds, ONS lookup, and run records](src/uk_charity_local_authority_analysis/core/README.md)              | `data/core/`                |
 | Council asset sales | [Receipt inputs, charity-removals panel, and interpretation](src/uk_charity_local_authority_analysis/council_asset_sales/README.md) | `data/council_asset_sales/` |
 
 Each module has its own `config.py`. Configure council analysis in its folder;
 core configuration is for core data preparation. If starting from raw charity
 sources, build core outputs first, then follow the council guide to select them.
+
+## Notebooks
+
+Exploratory notebooks live under `notebooks/`, grouped by module, and read from
+that module's prepared outputs (for example `data/council_asset_sales/raw/`
+and `data/council_asset_sales/output/`). Notebook dependencies (Jupyter,
+pandas, matplotlib, statsmodels, seaborn, pyarrow) are kept out of the base
+install and live in the `notebooks` dependency group:
+
+```powershell
+uv sync --group notebooks
+```
+
+Launch Jupyter from the repository root with `uv run jupyter lab` (or
+`jupyter notebook`), then open a notebook under `notebooks/`. Build the
+relevant module's outputs first, and restart the kernel after editing a
+module's `config.py`.
 
 ## Tests
 
