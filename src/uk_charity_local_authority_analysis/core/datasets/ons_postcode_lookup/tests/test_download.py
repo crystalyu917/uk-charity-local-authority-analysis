@@ -20,7 +20,7 @@ from uk_charity_local_authority_analysis.core.datasets.ons_postcode_lookup.endpo
 
 class OnsDownloadTests(unittest.TestCase):
     def test_destination_is_inside_repository(self):
-        self.assertEqual(PROJECT_ROOT, Path(__file__).resolve().parents[1])
+        self.assertEqual(PROJECT_ROOT, Path(__file__).resolve().parents[6])
         self.assertEqual(DEFAULT_RAW_DIR, PROJECT_ROOT / "data/core/ons/raw")
 
     @patch("uk_charity_local_authority_analysis.core.datasets.download.requests.get")
