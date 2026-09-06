@@ -1,9 +1,10 @@
-"""Paths shared by core dataset utilities."""
+"""Compatibility exports; edit data settings in core/config.py."""
 
-from pathlib import Path
-from typing import Final
+from uk_charity_local_authority_analysis.core.config import (
+    DEFAULT_DATA_DIR,
+    DEFAULT_STAGING_DIR,
+    OUTPUT_DIR,
+    PROJECT_ROOT,
+)
 
-PROJECT_ROOT: Final = Path(__file__).resolve().parents[3]
-DEFAULT_DATA_DIR: Final = PROJECT_ROOT / "data" / "core"
-DEFAULT_STAGING_DIR: Final = PROJECT_ROOT / "data" / "core" / "staging"
-OUTPUT_DIR = PROJECT_ROOT / "data" / "core" / "output"
+__all__ = ["DEFAULT_DATA_DIR", "DEFAULT_STAGING_DIR", "OUTPUT_DIR", "PROJECT_ROOT"]

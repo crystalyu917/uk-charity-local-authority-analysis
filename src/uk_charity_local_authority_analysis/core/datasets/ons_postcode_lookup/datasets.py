@@ -14,7 +14,11 @@ from zipfile import ZipFile
 
 import polars as pl
 
-from uk_charity_local_authority_analysis.core.datasets.constants import PROJECT_ROOT
+from uk_charity_local_authority_analysis.core.config import (
+    ONS_RAW_DIR as DEFAULT_RAW_DIR,
+    ONS_OUTPUT_PATH as DEFAULT_OUTPUT_PATH,
+    ONS_SOURCE_CSV,
+)
 from uk_charity_local_authority_analysis.core.datasets.download import download_file
 from uk_charity_local_authority_analysis.core.datasets.extraction import (
     extract_zip_members,
@@ -37,8 +41,6 @@ _LOOKUP_LAD_CODE_PATTERN = re.compile(r"LAD\d{2}CD")
 _LOOKUP_LAD_NAME_PATTERN = re.compile(r"LAD\d{2}NM")
 _LOOKUP_REGION_CODE_PATTERN = re.compile(r"RGN\d{2}CD")
 _LOOKUP_REGION_NAME_PATTERN = re.compile(r"RGN\d{2}NM")
-DEFAULT_RAW_DIR = PROJECT_ROOT / "data" / "core" / "ons" / "raw"
-DEFAULT_OUTPUT_PATH = DEFAULT_RAW_DIR / "ons_postcode_lookup.parquet"
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,20 +199,19 @@ def build_ons_postcode_lookup(
 ) -> Path:
     """Create or reuse the compact core Parquet postcode lookup.
 
-    An explicitly supplied CSV must exist. Without one, an existing output is
-    reused, then a standalone CSV in the core raw directory is preferred. On a
-    clean checkout the official archive is downloaded and its geography lookup
-    files are joined before the Parquet output is written.
+    An explicit or configured source CSV must exist and rebuilds the output.
+    Otherwise an existing output is reused, or the configured official archive
+    is downloaded and its geography lookup files are joined.
     """
-    source = source_csv or DEFAULT_RAW_DIR / "onspd_may_2026_uk.csv"
-    if source_csv is not None and not source.exists():
+    source = source_csv if source_csv is not None else ONS_SOURCE_CSV
+    if source is not None and not source.is_file():
         raise FileNotFoundError(f"ONS postcode CSV was not found: {source}")
 
-    if source_csv is None and output_path.is_file():
+    if source is None and output_path.is_file():
         return output_path
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    if not source.exists():
+    if source is None:
         _write_lookup(scan_ons_postcode_lookup(dest_dir=DEFAULT_RAW_DIR), output_path)
         return output_path
 

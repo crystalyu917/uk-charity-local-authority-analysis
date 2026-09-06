@@ -1,10 +1,13 @@
-"""Official endpoint for the ONS Postcode Directory."""
+"""Compatibility exports; edit the ONS endpoint in core/config.py."""
 
-from typing import Final
-
-ONS_POSTCODE_LOOKUP_ITEM_ID: Final = "6fff67d204fd4f339591ed667a6e3642"
-ONS_POSTCODE_LOOKUP_URL: Final = (
-    "https://www.arcgis.com/sharing/rest/content/items/"
-    f"{ONS_POSTCODE_LOOKUP_ITEM_ID}/data"
+from uk_charity_local_authority_analysis.core.config import (
+    ONS_POSTCODE_LOOKUP_FILENAME,
+    ONS_POSTCODE_LOOKUP_ITEM_ID,
+    ONS_POSTCODE_LOOKUP_URL,
 )
-ONS_POSTCODE_LOOKUP_FILENAME: Final = "ONSPD_MAY_2026.zip"
+
+__all__ = [
+    "ONS_POSTCODE_LOOKUP_FILENAME",
+    "ONS_POSTCODE_LOOKUP_ITEM_ID",
+    "ONS_POSTCODE_LOOKUP_URL",
+]

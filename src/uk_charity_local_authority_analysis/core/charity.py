@@ -6,22 +6,19 @@ from tempfile import TemporaryDirectory
 
 import polars as pl
 
-from uk_charity_local_authority_analysis.core.constants import (
-    DEFAULT_DATA_DIR,
-    OUTPUT_DIR,
+from uk_charity_local_authority_analysis.core.config import (
+    CHARITY,
+    CHARITY_CLASSIFICATION,
+    CHARITY_OUTPUT_PATH as DEFAULT_OUTPUT_PATH,
+    COMPANY_HOUSE,
+    FIND_THAT_CHARITY,
+    ONS_OUTPUT_PATH as ONS,
 )
 from uk_charity_local_authority_analysis.core.datasets.ons_postcode_lookup.datasets import (
-    DEFAULT_OUTPUT_PATH as ONS,
     build_ons_postcode_lookup,
 )
 
 logger = getLogger(__name__)
-
-CHARITY = DEFAULT_DATA_DIR / "charity_commission" / "legacy_raw" / "charity_commission_28052025.csv"
-CHARITY_CLASSIFICATION = DEFAULT_DATA_DIR / "charity_commission" / "legacy_raw" / "charity_classification_28052025.csv"
-COMPANY_HOUSE = DEFAULT_DATA_DIR / "company_house" / "legacy_raw" / "company_house_28052025.csv"
-FIND_THAT_CHARITY = DEFAULT_DATA_DIR / "find_that_charity" / "legacy_raw" / "find_that_charity_28052025.csv"
-DEFAULT_OUTPUT_PATH = OUTPUT_DIR / "charity_register.parquet"
 
 _SMALL_INCOME_LIMIT = 25_000
 _MEDIUM_INCOME_LIMIT = 1_000_000
