@@ -8,6 +8,7 @@ import csv
 import re
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 from zipfile import ZipFile
 
@@ -210,7 +211,7 @@ def build_ons_postcode_lookup(
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if not source.exists():
-        scan_ons_postcode_lookup(dest_dir=DEFAULT_RAW_DIR).sink_parquet(output_path)
+        _write_lookup(scan_ons_postcode_lookup(dest_dir=DEFAULT_RAW_DIR), output_path)
         return output_path
 
     columns = _read_csv_columns(source, "postcodes")
@@ -219,7 +220,7 @@ def build_ons_postcode_lookup(
     region_column = _require_pattern_column(
         columns, _MAIN_REGION_CODE_PATTERN, "region code"
     )
-    (
+    lookup = (
         pl.scan_csv(source, infer_schema=False, low_memory=True)
         .select(
             pl.col(postcode_column).alias("pcd"),
@@ -233,9 +234,17 @@ def build_ons_postcode_lookup(
             ).alias("region"),
         )
         .cast(ONS_POSTCODE_LOOKUP_SCHEMA)
-        .sink_parquet(output_path)
     )
+    _write_lookup(lookup, output_path)
     return output_path
+
+
+def _write_lookup(lookup: pl.LazyFrame, output_path: Path) -> None:
+    """Only publish a completed Parquet file, since subsequent builds reuse it."""
+    with TemporaryDirectory(dir=output_path.parent, prefix=".ons-lookup-") as directory:
+        temporary_path = Path(directory) / output_path.name
+        lookup.sink_parquet(temporary_path)
+        temporary_path.replace(output_path)
 
 
 def _find_source_members(archive_path: Path) -> tuple[str, str, str]:
