@@ -23,6 +23,12 @@ the project environment and dependencies.
 Source datasets are not bundled with the repository. Default data locations are
 under `data/`, and common dataset formats are excluded from Git.
 
+## Datasets
+
+Legacy datasets can be found here:
+https://drive.google.com/drive/folders/1jLyCxNoDJmrcjkQQYx_yZM3h2lTKfNPy?usp=sharing
+
+
 ## Module guides
 
 | Module              | Guide                                                                                                                               | Default data directory      |
