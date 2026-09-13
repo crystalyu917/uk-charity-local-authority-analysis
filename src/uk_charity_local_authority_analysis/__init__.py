@@ -1,2 +1,1 @@
-def hello() -> str:
-    return "Hello from uk-charity-local-authority-analysis!"
+"""UK charity register preparation and local authority analysis."""

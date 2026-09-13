@@ -9,9 +9,15 @@ wheels/
 # Virtual environments
 .venv
 
-# datasets
-*.zip
+# Datasets and downloaded archives
+data/**/*
+!data/**/**/
+!**/.gitkeep
+
 *.csv
 *.xlsx
 *.parquet
 *.json
+*.pdf
+*.txt
+*.odt
