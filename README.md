@@ -1,391 +1,212 @@
 # UK charity local authority analysis
 
-Build a UK charity register and analyse charity removals alongside English
-local-authority asset disposal receipts.
+Build an England and Wales charity register with postcode geography, then analyse
+charity removals alongside English local-authority asset disposal receipts. The
+council asset sales project also adds upper-tier local authority (UTLA) codes and
+names to charity records.
 
 ## Setup
 
-You need Git and `uv`. The project requires Python 3.14 or newer; `uv` manages
-the project environment and dependencies.
-
-1. Clone this repository and open a terminal in its root directory.
-2. Create the environment and install the locked dependencies:
-
-   ```powershell
-   uv sync --locked
-   ```
-
-3. Supply the local source datasets and configure the module you want to run.
-   The module guides below describe the required files and available downloads.
-4. Run commands with `uv run` from the repository root; manual environment
-   activation is unnecessary.
-
-Source datasets are not bundled with the repository. Default data locations are
-under `data/` and `projects/council_asset_sales/datasets/`, and common dataset
-formats are excluded from Git.
-
-## Datasets
-
-Legacy datasets can be found here:
-https://drive.google.com/drive/folders/1jLyCxNoDJmrcjkQQYx_yZM3h2lTKfNPy?usp=sharing
-
-
-## Module guides
-
-| Module              | Guide                                                                                                                               | Default data directory      |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| Core                | [Inputs, charity register builds, ONS lookup, and run records](#charity-register)              | `data/charity_commission_register/`                |
-| Council asset sales | [Receipt inputs, charity-removals panel, and interpretation](projects/council_asset_sales/README.md) | `projects/council_asset_sales/datasets/` |
-
-Each module separates processing settings (`config.py`) from local paths
-(`filepath.py`). File constants end in `_FILEPATH`; directories end in `_DIR`
-(with `PROJECT_ROOT` identifying the repository). Library functions use those
-defaults and accept explicit input and output filepath arguments.
-
-Executable scripts live in [`scripts/`](scripts/), with no package initialiser
-or `__main__.py`. Each script declares its input and output paths and passes them
-to library functions. Edit the script's path block for a particular run; changing
-library defaults does not override paths explicitly set in a script. The previous
-`python -m` pipeline entry points have been removed.
-
-| Script | Purpose |
-| --- | --- |
-| [`download_and_extract.py`](scripts/download_and_extract.py) | Download all register sources, or select `ons`, `charity`, `classification`, and/or `company_house` |
-| [`build_charity_register.py`](scripts/build_charity_register.py) | Prepare ONS geography and build the legacy-source register |
-| [`extract_charity_commission.py`](scripts/extract_charity_commission.py) | Extract the two local JSON archives |
-
-If starting from raw charity sources, build the register first, then follow the
-council guide to select inputs for that analysis.
-
-Download and extraction tooling lives in
-[`download_and_extract.py`](src/uk_charity_local_authority_analysis/charity_commission_register/download_and_extract.py).
-Preparation is grouped by source in `charity_commission.py`, `company_house.py`,
-`find_that_charity.py`, and `ons.py` within the register library.
-The download script calls its shared `download_file` and `extract_zip` functions. Build and extraction
-functions read local files; missing inputs raise an error without a network
-request. The standalone scripts remain plain files, not a Python package.
-
-### Download all datasets
-
-From the repository root, run:
+Clone the repository and run all commands from its root. You need Git and `uv`;
+the project requires Python 3.14 or newer.
 
 ```powershell
-uv run python scripts/download_and_extract.py
+uv sync --locked
 ```
 
-To download only certain sources, supply one or more names:
+Use `uv run` for commands; environment activation is unnecessary. For notebooks:
 
 ```powershell
-uv run python scripts/download_and_extract.py ons
-uv run python scripts/download_and_extract.py charity classification
-uv run python scripts/download_and_extract.py company_house
+uv sync --locked --group notebooks
+uv run --group notebooks jupyter lab
 ```
 
-No source names means all four register sources. The script's `SOURCES` mapping
-defines URLs, source directories, and filenames. Every run downloads fresh files, including
-reruns on the same day. If a download
-fails, the remaining downloads are still attempted, and the command reports the
-failed sources and exits with a nonzero status. Rerunning refreshes all selected sources.
+Source datasets and generated outputs are excluded from Git, including CSV,
+Parquet, JSON, Excel and ZIP files. Supply local inputs before building. The
+[legacy dataset folder](https://drive.google.com/drive/folders/1jLyCxNoDJmrcjkQQYx_yZM3h2lTKfNPy?usp=sharing)
+is the existing shared location for legacy sources.
 
-The download script uses the local download date in `DDMMYYYY` format, for example
-`25052025` for 25 May 2025. Files are saved in these repository-relative folders:
+## Choose a workflow
 
-| Source | Download destination |
-| --- | --- |
-| Charity and classification archives | `data/charity_commission_register/charity_commission/<DDMMYYYY>/` |
-| ONS postcode archive | `data/charity_commission_register/ons/<DDMMYYYY>/` |
-| Companies House ZIP | `data/charity_commission_register/company_house/<DDMMYYYY>/` |
+| Workflow | Inputs | Output | Guide |
+| --- | --- | --- | --- |
+| Core charity register | Legacy charity, classification, company and Find That Charity CSVs; ONS postcode data | Register with `charity_postcode` and `local_authority_code` | [Build the register](#build-the-charity-register) |
+| Council receipts panel | Project-local register, receipts CSV and prepared ONS lookup | English LAD/year/charity-size panel | [Council panel](projects/council_asset_sales/README.md#build-the-receipts-panel) |
+| Charity asset register | Project-local register and postcode-to-UTLA lookup | Charity records with `UTLA` and `UTLA_NAME` | [UTLA enrichment](projects/council_asset_sales/README.md#build-the-charity-asset-register) |
 
-Extraction and build scripts default to today's download folder. Set their
-`DOWNLOAD_DATE` to an older folder name when processing an earlier download.
-The build script saves the prepared ONS lookup at `ons/<DDMMYYYY>/ons_postcode_lookup.parquet`; remove that
-cached output or choose a new output filepath to rebuild it from a new archive.
-Legacy register CSV inputs remain in their legacy folders listed below.
+LAD means local authority district. The panel uses LAD geography; the asset
+register adds UTLA geography through a separate postcode lookup.
 
-This downloads the ONS ZIP, the two Charity Commission JSON ZIPs, the Companies
-House ZIP. Each ZIP is automatically extracted in the
-same dated directory, inside a subfolder named after the archive. All archive
-files and internal folders are preserved; the ZIP is kept too. Rerunning replaces
-the extracted folder after a complete fresh extraction, removing obsolete members
-and updating files even if their sizes have not changed. CSV downloads
-need no extraction. The single build script prepares ONS and the register. The legacy
-CSVs for Charity Commission, Companies House, and Find That Charity still need
-to be supplied locally; these downloads do not replace them.
+## Repository layout
 
-Companies House uses the single-file snapshot linked from its
-[download page](https://download.companieshouse.gov.uk/en_output.html), pinned to
-`BasicCompanyDataAsOneFile-2026-09-01.zip`. Edit the URL, destination directory,
-and filename directly in the `company_house` entry in `scripts/download_and_extract.py`
-to select a newer release.
-This snapshot covers live companies; its ZIP and extracted CSV are both kept. The register
-build continues to use the legacy CSV containing dissolved-company addresses.
+```text
+scripts/                                Core download and build commands
+src/uk_charity_local_authority_analysis/
+  charity_commission_register/          Shared register and source preparation
+data/charity_commission_register/        Local core inputs and outputs
+projects/council_asset_sales/
+  scripts/                              Project download and build commands
+  pipeline/                             Receipts, geography, panel and UTLA processing
+  datasets/                             Project inputs and outputs
+  notebooks/                            Charity, receipts and regression analysis
+tests/                                  Shared library tests
+```
 
-## Charity register
-
-Build a charity register from local Charity Commission, Companies House, and
-Find That Charity CSVs, enriched with ONS postcode geography. The register is
-available to downstream analyses such as council asset sales.
-
-Library code lives in
-[`src/uk_charity_local_authority_analysis/charity_commission_register/`](src/uk_charity_local_authority_analysis/charity_commission_register/).
-Default input and output files live in
-[`data/charity_commission_register/`](data/charity_commission_register/). Default register inputs are listed in
+Library settings live in
+[`config.py`](src/uk_charity_local_authority_analysis/charity_commission_register/config.py)
+and default paths in
 [`filepath.py`](src/uk_charity_local_authority_analysis/charity_commission_register/filepath.py).
+Core scripts declare explicit paths for each run; edit those assignments to
+change their inputs. Library functions also accept explicit filepaths. Restart
+Python or the notebook kernel after changing imported settings.
 
-### Configure inputs
+## Build the charity register
 
-Processing settings, including income thresholds, category mappings, and source
-URLs, live in [`config.py`](src/uk_charity_local_authority_analysis/charity_commission_register/config.py).
-Default paths live in [`filepath.py`](src/uk_charity_local_authority_analysis/charity_commission_register/filepath.py).
-Restart Python after editing either module. For command-line runs, edit the
-explicit filepath assignments in the selected script.
+### 1. Supply the legacy CSV inputs
 
-| Source or output | Default filepath constants |
+The default build uses these files under `data/charity_commission_register/`:
+
+| Source | Relative path |
 | --- | --- |
-| Charity Commission legacy CSVs | `CHARITY_FILEPATH`, `CHARITY_CLASSIFICATION_FILEPATH` |
-| Companies House | `COMPANY_HOUSE_FILEPATH` |
-| Find That Charity | `FIND_THAT_CHARITY_FILEPATH` |
-| ONS archive and optional standalone CSV | `ONS_ARCHIVE_FILEPATH`, `ONS_SOURCE_CSV_FILEPATH` |
-| Prepared ONS lookup | `ONS_LOOKUP_FILEPATH` |
-| Register output basename | `CHARITY_REGISTER_FILEPATH` |
-| Official Charity Commission archives | `CHARITY_COMMISSION_CHARITY_ARCHIVE_FILEPATH`, `CHARITY_COMMISSION_CLASSIFICATION_ARCHIVE_FILEPATH` |
+| Charity Commission | `charity_commission/28052025_legacy/charity_commission_28052025.csv` |
+| Charity classifications | `charity_commission/28052025_legacy/charity_classification_28052025.csv` |
+| Companies House | `company_house/28052025_legacy/company_house_28052025.csv` |
+| Find That Charity | `find_that_charity_28052025_legacy/find_that_charity_28052025.csv` |
 
-Charity Commission and Companies House legacy data use their `28052025_legacy`
-subfolders. Find That Charity uses
-[`find_that_charity_28052025_legacy/`](data/charity_commission_register/find_that_charity_28052025_legacy/)
-directly under `data/charity_commission_register/`, containing
-`find_that_charity_28052025.csv`. These 28 May 2025 files are the last files we downloaded
-from those sources that include addresses for dissolved charities, so they remain
-the default inputs for the register build.
+These legacy snapshots retain address information needed for removed charities
+and dissolved companies. Edit the input block in
+[`scripts/build_charity_register.py`](scripts/build_charity_register.py) to use
+different files with the expected columns.
 
-The defaults also select the May 2026 ONS release. Supply the legacy CSVs locally.
-Official JSON downloads for
-charity and classification data are available through the
-[Charity Commission downloader](#charity-commission-downloads).
-To choose different data, change the directory and filenames together:
+The official JSON archives and Companies House snapshot available through the
+downloader are separate sources. Downloading them does not convert or replace
+the legacy CSV inputs used by this build.
 
-```python
-CHARITY_COMMISSION_DIR = DEFAULT_DATA_DIR / "charity_commission" / "raw"
-CHARITY_FILEPATH = CHARITY_COMMISSION_DIR / "charity_commission_latest.csv"
-CHARITY_CLASSIFICATION_FILEPATH = CHARITY_COMMISSION_DIR / "charity_classification_latest.csv"
-
-# Absolute directories also work.
-COMPANY_HOUSE_DIR = Path("D:/datasets/companies")
-COMPANY_HOUSE_FILEPATH = COMPANY_HOUSE_DIR / "companies.csv"
-```
-
-Anchor repo-relative paths to `PROJECT_ROOT` or `DEFAULT_DATA_DIR`. Replacement
-CSVs must retain the columns expected by the pipeline.
-
-For ONS, change the item ID or supply a direct compatible ZIP URL. Keep the ZIP
-filename aligned with the release. The download command refreshes ZIPs and extracted
-files on every run. ONS Parquet builds still reuse existing outputs: choose a new
-output path or remove the cached Parquet when switching releases.
-
-Leave `ONS_SOURCE_CSV_FILEPATH = None` to use the archive and geography name lookups, or
-set it to a local CSV path. A configured CSV rebuilds the ONS Parquet on each
-build and supplies geography codes with null names; it does not affect the
-download and extraction functions.
-
-### Run
-
-Run these commands from the repository root after completing the
-[setup guide](#setup).
-
-With the legacy CSVs supplied locally, run these steps in order. Skip the
-download when the ONS archive is already available:
+### 2. Prepare ONS data and build
 
 ```powershell
 uv run python scripts/download_and_extract.py ons
 uv run python scripts/build_charity_register.py
 ```
 
-The build script prepares or reuses the ONS lookup and saves a timestamped
-register. Set `DOWNLOAD_DATE`
-in its path block when using older downloads. Existing ONS Parquet outputs are
-reused; choose a new output path or remove the cached lookup to rebuild it.
+Skip downloading when the desired ONS archive is already local. The build script
+defaults to today's download folder; set its `DOWNLOAD_DATE` to the existing
+folder's `DDMMYYYY` date when using an earlier download.
 
-| Library function | Result under the default `data\charity_commission_register\ons` directory |
-| --- | --- |
-| `extract_ons_postcode_lookup` | Extract the postcode, LAD, and region CSVs from a local ZIP |
-| `build_ons_postcode_lookup` | Create `ons_postcode_lookup.parquet` with postcode, LAD, and region codes/names |
-
-The register library function reads a supplied ONS Parquet directly; the script
-prepares it first. Custom library use:
-
-```python
-from pathlib import Path
-from uk_charity_local_authority_analysis.charity_commission_register import build_charity_register
-
-saved = build_charity_register(
-    output_path=Path("custom/output/register.parquet"),
-    charity_filepath=Path("custom/charity.csv"),
-    classification_filepath=Path("custom/classification.csv"),
-    company_house_filepath=Path("custom/companies.csv"),
-    find_that_charity_filepath=Path("custom/find_that_charity.csv"),
-    ons_filepath=Path("custom/ons_lookup.parquet"),
-)
-```
-
-### Outputs and run records
-
-Each successful register build saves two files beside the configured
-`CHARITY_REGISTER_FILEPATH`. By default:
+The configured release is `ONSPD_MAY_2026.zip`. The build prepares postcode,
+LAD and region codes/names in:
 
 ```text
-data/charity_commission_register/output/
-  charity_register_20260906_143025_123456Z.parquet
-  charity_register_20260906_143025_123456Z.run.json
+data/charity_commission_register/ons/<DDMMYYYY>/ons_postcode_lookup.parquet
 ```
 
-The suffix is the run's UTC start time, including microseconds (`Z` means UTC).
-Previous runs are preserved, including when timestamps collide. The command
-prints the Parquet path and logs the JSON path.
+An existing prepared lookup is reused. Choose a new output path or remove the
+cached lookup when rebuilding from a changed archive. Setting
+`ONS_SOURCE_CSV_FILEPATH` to a compatible standalone ONS CSV rebuilds the lookup
+on each run, with geography codes but null names.
 
-The JSON records:
+### 3. Use the outputs
 
-- UTC start and completion times.
-- Input dataset paths, sizes, and modification timestamps.
-- The actual prepared ONS filepath used by the register build.
-- Saved Parquet path, size, and row/column counts.
+Each successful build writes a new pair under
+`data/charity_commission_register/output/`:
 
-Records describe successful builds only; older outputs are not backfilled.
-They contain file metadata, not copies or hashes of the inputs. The register run record does not infer the upstream origin of the supplied ONS file.
-If record publication fails, the new Parquet is removed and the build reports
-an error.
+```text
+charity_register_<YYYYMMDD_HHMMSS_microsecondsZ>.parquet
+charity_register_<YYYYMMDD_HHMMSS_microsecondsZ>.run.json
+```
 
-### Analyse removals
+The timestamp is the UTC run start time. Earlier runs are preserved. The JSON
+records start/completion times, input paths and file metadata, the prepared ONS
+path, and output dimensions. It records metadata rather than input contents or
+hashes.
+
+For council analysis, place the selected register in the project's
+`datasets/charity_register_inputs/` folder as described in the
+[council guide](projects/council_asset_sales/README.md#prepare-the-project-inputs).
+
+### Register conventions
+
+- Main charity records use `linked_charity_number = 0`; Find That Charity is
+  restricted to `ccew`. Linked-fund classifications contribute to the parent
+  charity, and missing classification flags become zero.
+- Company numbers remain strings; numeric identifiers are padded to eight
+  characters. Source joins validate lookup uniqueness.
+- `charity_postcode` uses the first available postcode from Companies House
+  (`RegAddress.PostCode`), Charity Commission (`charity_contact_postcode`), then
+  Find That Charity (`postalCode`). It is matched to ONS to obtain
+  `local_authority_code`; an unmatched postcode leaves that code null.
+- Financial years start in April. Income bands are Small below GBP 25,000,
+  Medium from GBP 25,000 through GBP 1,000,000, and Large above GBP 1,000,000.
+  Missing income leaves size unclassified.
+- Geography follows the selected ONS release, rather than historical boundaries
+  for each removal date.
+
+To aggregate removals from the latest core register:
 
 ```python
-from pathlib import Path
-from uk_charity_local_authority_analysis.charity_commission_register.build_charity_register import scan_charity_removals
-
-# Latest timestamped run; falls back to the old unsuffixed file if necessary.
-removals = scan_charity_removals().collect()
-
-# Or select a specific run.
-removals = scan_charity_removals(
-    Path("data/charity_commission_register/output/charity_register_20260906_143025_123456Z.parquet")
-).collect()
-```
-
-Results group removals by local authority, financial year, and size. Rows without
-a local authority or removal year are excluded.
-
-The pipeline uses these conventions:
-
-- England and Wales main charity records (`linked_charity_number = 0`), with
-  Find That Charity restricted to `ccew`. Linked-fund classifications contribute
-  to the parent charity; absent classification flags are zero.
-- Company numbers remain strings, with numeric identifiers padded to eight
-  characters. Joins validate lookup uniqueness to avoid multiplying rows.
-- Postcode priority: Companies House, Charity Commission, then Find That Charity.
-  Unmatched postcodes retain a null local authority code.
-- Financial years start in April. Income bands: Small below 25,000; Medium from
-  25,000 through 1,000,000; Large above 1,000,000. Missing income is unclassified.
-- Geography comes from the configured ONS release, rather than being reconstructed
-  for each historical removal date.
-
-### Library folder guide
-
-Source locations below are relative to
-`src/uk_charity_local_authority_analysis/charity_commission_register/`;
-tests are relative to the repository root.
-
-| Location | Purpose |
-| --- | --- |
-| `config.py` | Income thresholds, category mappings, and source URLs |
-| `filepath.py` | Explicitly named default input and output filepaths |
-| `build_charity_register.py` | Merge prepared sources, save register runs, and aggregate removals |
-| `download_and_extract.py` | File downloads and generic ZIP extraction |
-| `charity_commission.py` | Charity Commission archive extraction, CSV loading, and charity/classification cleaning |
-| `company_house.py` | Companies House CSV loading and company-number normalisation |
-| `find_that_charity.py` | Find That Charity CSV loading and cleaning |
-| `ons.py` | ONS archive extraction, lookup preparation, and register geography |
-| [`tests/charity_commission_register/`](tests/charity_commission_register/) | Library tests, organised by module outside `src/` |
-
-### Charity register tests
-
-Run the core tests from the repository root:
-
-```powershell
-uv run python -m unittest discover -s tests/charity_commission_register -t . -v
-```
-
-## Charity Commission downloads
-
-Download the two JSON archives linked from the
-[full register download page](https://register-of-charities.charitycommission.gov.uk/en/register/full-register-download):
-
-- [Charity](https://ccewuksprdoneregsadata1.blob.core.windows.net/data/json/publicextract.charity.zip)
-- [Charity classification](https://ccewuksprdoneregsadata1.blob.core.windows.net/data/json/publicextract.charity_classification.zip)
-
-Run from the repository root:
-
-```powershell
-uv run python scripts/download_and_extract.py charity classification
-```
-
-The download script fetches and extracts the selected archives. Files are under
-`data/charity_commission_register/charity_commission/<DDMMYYYY>/`.
-Each ZIP has an adjacent archive-named folder containing its original JSON file.
-The optional `scripts/extract_charity_commission.py` command can re-extract local
-archives with explicitly configured JSON output paths.
-
-Downloads refresh ZIPs and extracted files even on same-day reruns. To keep a new
-snapshot, run the download script on a new date. To extract an earlier snapshot,
-set the extraction script's `DOWNLOAD_DATE` to that folder name. The two requests
-are independent and do not guarantee that upstream data was published at the
-same instant. Download URLs live in the library `config.py`.
-
-```python
-from pathlib import Path
-from uk_charity_local_authority_analysis.charity_commission_register.charity_commission import (
-    extract_charity_commission,
+from uk_charity_local_authority_analysis.charity_commission_register.build_charity_register import (
+    scan_charity_removals,
 )
 
-sources = extract_charity_commission(Path("data/charity_commission_register/charity_commission/25052025"))
-print(sources.charity, sources.classification)
+removals = scan_charity_removals().collect()
 ```
 
-This library module extracts local source JSON; it does not convert it to the
-legacy CSV schema or change the register builder's configured inputs.
-It shares the safe local extraction helpers with ONS. Download caching and
-atomic file publication are implemented in `download_and_extract.py`.
+Pass a specific register `Path` to select another run. Results group by
+`local_authority_code`, `financial_year` and `size_category`. Missing sizes are
+labelled `Unknown`; records without a local authority or removal year are excluded.
 
-Offline tests live in `tests/charity_commission_register/datasets/charity_commission/`:
+## Download source snapshots
+
+[`scripts/download_and_extract.py`](scripts/download_and_extract.py) accepts
+one or more source names. Omitting names downloads all four:
 
 ```powershell
-uv run python -m unittest discover -s tests/charity_commission_register/datasets/charity_commission -t . -v
+uv run python scripts/download_and_extract.py
+uv run python scripts/download_and_extract.py charity classification
+uv run python scripts/download_and_extract.py company_house
 ```
+
+| Source name | Configured download | Folder under `data/charity_commission_register/` |
+| --- | --- | --- |
+| `ons` | May 2026 ONS postcode directory | `ons/<DDMMYYYY>/` |
+| `charity` | Charity Commission charity JSON ZIP | `charity_commission/<DDMMYYYY>/` |
+| `classification` | Charity Commission classification JSON ZIP | `charity_commission/<DDMMYYYY>/` |
+| `company_house` | `BasicCompanyDataAsOneFile-2026-09-01.zip` | `company_house/<DDMMYYYY>/` |
+
+The folder date is the local download date, not the source's publication date.
+Every run refreshes selected downloads, including same-day reruns. ZIPs are
+retained and extracted into adjacent archive-named folders; extraction replaces
+the previous folder after a successful fresh extraction. Failed sources are
+reported after the remaining selections are attempted, and the command exits
+with a nonzero status.
+
+Edit the script's `SOURCES` mapping and the referenced URLs in library `config.py`
+to change releases. Keep archive filenames and build paths aligned. Build
+functions read local data and do not initiate downloads.
+
+Council receipts and UTLA downloads have their own
+[project commands](projects/council_asset_sales/README.md).
 
 ## Notebooks
 
-Exploratory notebooks live under `projects/council_asset_sales/notebooks/` and read from
-that module's prepared outputs (for example `projects/council_asset_sales/datasets/raw/`
-and `projects/council_asset_sales/datasets/output/`). Notebook dependencies (Jupyter,
-pandas, matplotlib, statsmodels, seaborn, pyarrow) are kept out of the base
-install and live in the `notebooks` dependency group:
+The [council notebooks](projects/council_asset_sales/notebooks/) contain:
 
-```powershell
-uv sync --group notebooks
-```
+- `charity.ipynb`: charity register exploration, counts and trends.
+- `receipt.ipynb`: disposal receipts from the prepared council panel.
+- `regression.ipynb`: analysis using the prepared council panel.
 
-Launch Jupyter from the repository root with `uv run jupyter lab` (or
-`jupyter notebook`), then open a notebook under `projects/council_asset_sales/notebooks/`. Build the
-relevant module's outputs first, and restart the kernel after editing a
-module's `config.py` or `filepath.py`.
+Install the `notebooks` dependency group using the [setup commands](#setup).
+Select the project register before opening the charity notebook, and build the
+panel before running the receipts or regression notebooks.
 
 ## Tests
 
-Tests for code under `src/` live in the top-level `tests/` folder, organised by
-module. Council asset sales tests remain in `projects/council_asset_sales/tests/`.
-Download tests live in `tests/charity_commission_register/test_download.py` and
-are included in the main suite. Run each suite separately:
+Run the committed shared-library tests from the repository root:
 
 ```powershell
 uv run python -m unittest discover -s tests -t . -v
-uv run python -m unittest discover -s projects/council_asset_sales/tests -t . -v
 ```
 
-Each module guide also includes a command for running only that module's tests.
+Tests are organised under
+[`tests/charity_commission_register/`](tests/charity_commission_register/), including
+download, extraction, source preparation and register behaviour.
