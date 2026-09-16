@@ -1,20 +1,18 @@
 """Library processing settings and download URLs; local paths live in filepath.py."""
 
-CHARITY_COMMISSION_DOWNLOAD_PAGE = (
-    "https://register-of-charities.charitycommission.gov.uk/en/register/full-register-download"
-)
-CHARITY_COMMISSION_CHARITY_URL = (
-    "https://ccewuksprdoneregsadata1.blob.core.windows.net/data/json/publicextract.charity.zip"
-)
-CHARITY_COMMISSION_CLASSIFICATION_URL = (
-    "https://ccewuksprdoneregsadata1.blob.core.windows.net/data/json/publicextract.charity_classification.zip"
-)
+CHARITY_COMMISSION_DOWNLOAD_PAGE = "https://register-of-charities.charitycommission.gov.uk/en/register/full-register-download"
+CHARITY_COMMISSION_CHARITY_URL = "https://ccewuksprdoneregsadata1.blob.core.windows.net/data/json/publicextract.charity.zip"
+CHARITY_COMMISSION_CLASSIFICATION_URL = "https://ccewuksprdoneregsadata1.blob.core.windows.net/data/json/publicextract.charity_classification.zip"
 
 ONS_POSTCODE_LOOKUP_ITEM_ID = "6fff67d204fd4f339591ed667a6e3642"
 ONS_POSTCODE_LOOKUP_URL = (
     "https://www.arcgis.com/sharing/rest/content/items/"
     f"{ONS_POSTCODE_LOOKUP_ITEM_ID}/data"
 )
+
+UTLA_LOOKUP_URL = "https://www.arcgis.com/sharing/rest/content/items/bc8f6d1f6ee64111b6a59b22c6605f3b/data"
+UTLA_ARCHIVE_FILENAME = "PCD_OA21_LSOA21_MSOA21_LTLA22_UTLA22_CAUTH22_NOV23_UK_LU_V2.zip"
+UTLA_CSV_FILENAME = "PCD_OA21_LSOA21_MSOA21_LTLA22_UTLA22_CAUTH22_NOV23_UK_LU_v2.csv"
 
 SMALL_INCOME_LIMIT = 25_000
 MEDIUM_INCOME_LIMIT = 1_000_000
@@ -79,4 +77,3 @@ CATEGORY_MAPPING = {
         "classification_armed_forces/emergency_service_efficiency",
     ],
 }
-

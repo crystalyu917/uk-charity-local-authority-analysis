@@ -13,6 +13,8 @@ from uk_charity_local_authority_analysis.charity_commission_register.config impo
     CHARITY_COMMISSION_CHARITY_URL,
     CHARITY_COMMISSION_CLASSIFICATION_URL,
     ONS_POSTCODE_LOOKUP_URL,
+    UTLA_LOOKUP_URL,
+    UTLA_ARCHIVE_FILENAME,
 )
 from uk_charity_local_authority_analysis.charity_commission_register.download_and_extract import (
     download_file,
@@ -22,6 +24,7 @@ from uk_charity_local_authority_analysis.charity_commission_register.download_an
 DATA_DIR = PROJECT_ROOT / "data" / "charity_commission_register"
 # Source name: URL, source directory, filename. The download date is appended.
 SOURCES = {
+    "utla": (UTLA_LOOKUP_URL, DATA_DIR / "utla_lookup", UTLA_ARCHIVE_FILENAME),
     "ons": (ONS_POSTCODE_LOOKUP_URL, DATA_DIR / "ons", "ONSPD_MAY_2026.zip"),
     "charity": (
         CHARITY_COMMISSION_CHARITY_URL, DATA_DIR / "charity_commission", "publicextract.charity.zip",

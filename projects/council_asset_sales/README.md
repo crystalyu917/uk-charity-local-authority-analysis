@@ -1,14 +1,11 @@
 # Council asset sales
 
-Build two datasets from a selected charity register:
+Build a charity receipts panel relating charity removals to asset disposal
+receipts by financial year and charity size, using English local authority
+districts (LAD25).
 
-| Dataset | Purpose | Geography |
-| --- | --- | --- |
-| Charity receipts panel | Relate charity removals to asset disposal receipts by financial year and charity size | English local authority districts (LAD25) |
-| Charity asset register | Add `UTLA` and `UTLA_NAME` to charity records | November 2023 postcodes mapped to 2022 upper-tier local authorities |
-
-These are separate builds. Adding UTLA columns does not change the panel's LAD
-grouping or receipt coverage.
+The [core register workflow](../../README.md#build-the-charity-register) supplies
+postcode geography and upper-tier authority columns.
 
 ## Prepare the project inputs
 
@@ -30,9 +27,7 @@ timestamped register is selected, falling back to `charity_register.parquet`
 when no timestamped run exists.
 
 The panel and charity notebook share the register settings in
-[`filepath.py`](filepath.py). The asset builder has its own overrides in
-[`scripts/build_charity_asset_register.py`](scripts/build_charity_asset_register.py).
-Pin both when they should use the same specific snapshot.
+[`filepath.py`](filepath.py).
 
 ## Build the receipts panel
 
@@ -126,62 +121,6 @@ and charity size category.
 - Receipt values repeat across charity size categories. Deduplicate by LAD and
   year before summing receipts.
 
-## Build the charity asset register
-
-The asset register uses the project charity register and a separate ONS
-postcode-to-UTLA CSV. The downloader is configured for
-`PCD_OA21_LSOA21_MSOA21_LTLA22_UTLA22_CAUTH22_NOV23_UK_LU_V2.zip`.
-
-```powershell
-uv run python projects/council_asset_sales/scripts/download_utla_lookup.py
-uv run python projects/council_asset_sales/scripts/build_charity_asset_register.py
-```
-
-Downloads are refreshed and extracted into `datasets/utla_lookup/<DDMMYYYY>/`.
-The date identifies the download snapshot; the lookup still uses November 2023
-postcode coverage and 2022 UTLA geography.
-
-### Matching logic
-
-[`pipeline/charity_asset_register.py`](pipeline/charity_asset_register.py)
-left-joins the register's `charity_postcode` to the lookup's `pcds`, ignoring
-case and whitespace. It adds:
-
-| Lookup column | Output column |
-| --- | --- |
-| `utla22cd` | `UTLA` |
-| `utla22nm` | `UTLA_NAME` |
-
-LAD codes, charity names and charity identifiers are not join keys. In a
-core-built register, `charity_postcode` already follows the Companies House,
-Charity Commission, then Find That Charity postcode priority.
-
-All input rows and their order are retained. Unmatched postcodes receive null
-UTLA values. Identical mappings are deduplicated; conflicting postcode mappings
-fail join validation. Inputs already containing `UTLA` or `UTLA_NAME` are rejected.
-
-### Configure and save
-
-Edit [`scripts/build_charity_asset_register.py`](scripts/build_charity_asset_register.py):
-
-| Setting | Behaviour |
-| --- | --- |
-| `CHARITY_FILEPATH` | `None` selects the latest register beside `CHARITY_BASE_FILEPATH`; set a path to pin it |
-| `UTLA_LOOKUP_FILEPATH` | `None` selects the configured CSV filename in the newest dated UTLA folder; set a path to pin it |
-| `COLUMNS_TO_KEEP` | Ordered output column list; `None` retains every input column plus the UTLA columns |
-| `OUTPUT_FILEPATH` | Output basename |
-
-The default column list enumerates the expected register schema. Update it or
-use `None` when input columns change. Each build writes:
-
-```text
-datasets/output/charity_asset_register_<YYYYMMDD_HHMMSS_microsecondsZ>.parquet
-```
-
-Both project builders use UTC run timestamps, preserve earlier outputs and leave
-source registers unchanged. They write Parquet files; the core register builder
-also writes a `.run.json` record.
-
 ## Notebooks
 
 Install notebook dependencies and launch Jupyter from the repository root:
@@ -205,7 +144,6 @@ after changing the register or panel settings so they use the intended snapshot.
 | Location | Purpose |
 | --- | --- |
 | [`scripts/`](scripts/) | Downloads and builds |
-| [`pipeline/charity_asset_register.py`](pipeline/charity_asset_register.py) | UTLA join and asset register output |
 | [`pipeline/la_receipts.py`](pipeline/la_receipts.py) | Receipts CSV loading and validation |
 | [`pipeline/la_capital_receipts.py`](pipeline/la_capital_receipts.py) | Submitted LAD receipts and units |
 | [`pipeline/geography.py`](pipeline/geography.py) | LAD25 crosswalk and English geography |
@@ -213,7 +151,6 @@ after changing the register or panel settings so they use the intended snapshot.
 | [`pipeline/legacy/`](pipeline/legacy/) | Older helpers, unused by current commands |
 | `datasets/charity_register_inputs/` | Selected project charity registers |
 | `datasets/la_receipts/` | Dated receipts CSVs and legacy inputs |
-| `datasets/utla_lookup/` | Dated postcode-to-UTLA downloads |
-| `datasets/output/` | Generated panels and asset registers |
+| `datasets/output/` | Generated receipts panels |
 
 For shared library tests, see the repository [test guide](../../README.md#tests).

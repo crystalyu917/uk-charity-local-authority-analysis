@@ -44,11 +44,25 @@ class CharityPipelineTests(unittest.TestCase):
             "pcds": ["SW1A 1AA", "AB1 2CD", "XY1 2ZZ"],
             "lad25cd": ["LAD1", "LAD2", "LAD3"],
         })
-        result = core.merge_charity_data(
-            charities, classifications, companies, ftc, ons
+        utla = pl.DataFrame({
+            "pcds": ["sw1a 1aa", "AB1 2CD"],
+            "utla22cd": ["UTLA1", "UTLA2"],
+            "utla22nm": ["Authority One", "Authority Two"],
+        })
+        result = core.load_charity_register(
+            charities, classifications, companies, ftc, ons, utla
         ).sort("registered_charity_number")
         self.assertEqual(result.height, 3)
         self.assertEqual(result["local_authority_code"].to_list(), ["LAD1", "LAD2", "LAD3"])
+        self.assertEqual(result["UTLA"].to_list(), ["UTLA1", "UTLA2", None])
+        self.assertEqual(result["UTLA_name"].to_list(), ["Authority One", "Authority Two", None])
+        with TemporaryDirectory() as directory:
+            lookup_path = Path(directory) / "utla.csv"
+            utla.write_csv(lookup_path)
+            loaded = core.load_charity_register(
+                charities, classifications, companies, ftc, ons, utla_filepath=lookup_path,
+            ).sort("registered_charity_number")
+            self.assertTrue(loaded.equals(result))
         self.assertEqual(result["charity_status"].to_list(), ["active", "inactive", "active"])
         self.assertEqual(result["registration_fy"].to_list(), [2019, 2020, None])
         self.assertEqual(result["removal_fy"].to_list(), [None, 2023, None])

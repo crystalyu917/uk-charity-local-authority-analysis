@@ -1,33 +1,48 @@
 """Build an England and Wales charity register from the local source snapshots."""
 
-from datetime import datetime, timedelta, timezone
-from logging import getLogger
 import json
 import os
 import re
+from datetime import datetime, timedelta, timezone
+from logging import getLogger
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import polars as pl
 
+from uk_charity_local_authority_analysis.charity_commission_register.charity_commission import (
+    clean_charity,
+    clean_charity_classification,
+    load_charity,
+    load_charity_classification,
+)
+from uk_charity_local_authority_analysis.charity_commission_register.company_house import (
+    _company_number_expr,
+    clean_company_house,
+    load_company_house,
+)
+from uk_charity_local_authority_analysis.charity_commission_register.config import (
+    CATEGORY_MAPPING,
+)
 from uk_charity_local_authority_analysis.charity_commission_register.filepath import (
-    CHARITY_FILEPATH,
     CHARITY_CLASSIFICATION_FILEPATH,
+    CHARITY_FILEPATH,
     CHARITY_REGISTER_FILEPATH,
     COMPANY_HOUSE_FILEPATH,
     FIND_THAT_CHARITY_FILEPATH,
     ONS_LOOKUP_FILEPATH,
+    UTLA_LOOKUP_FILEPATH,
+)
+from uk_charity_local_authority_analysis.charity_commission_register.find_that_charity import (
+    clean_find_that_charity,
+    load_find_that_charity,
+)
+from uk_charity_local_authority_analysis.charity_commission_register.ons import (
+    load_ons,
+    make_postcode_to_local_authority_lookup,
 )
 
-from uk_charity_local_authority_analysis.charity_commission_register.config import CATEGORY_MAPPING
-
-from uk_charity_local_authority_analysis.charity_commission_register.charity_commission import (
-    load_charity, load_charity_classification, clean_charity, clean_charity_classification,
-)
-from uk_charity_local_authority_analysis.charity_commission_register.company_house import _company_number_expr, load_company_house, clean_company_house
-from uk_charity_local_authority_analysis.charity_commission_register.find_that_charity import load_find_that_charity, clean_find_that_charity
-from uk_charity_local_authority_analysis.charity_commission_register.ons import load_ons, make_postcode_to_local_authority_lookup
-
+from uk_charity_local_authority_analysis.charity_commission_register.utla import add_utla, load_utla
 
 logger = getLogger(__name__)
 
@@ -36,7 +51,13 @@ def charity_address(df: pl.DataFrame) -> pl.DataFrame:
     # Convert empty string values to nulls
     postcode_cols = ["RegAddress.PostCode", "charity_contact_postcode", "postalCode"]
     df = df.with_columns(
-        pl.when(pl.col(col).cast(pl.Utf8).str.strip_chars().str.to_lowercase().is_in(["", "nan", "none", "null"]))
+        pl.when(
+            pl.col(col)
+            .cast(pl.Utf8)
+            .str.strip_chars()
+            .str.to_lowercase()
+            .is_in(["", "nan", "none", "null"])
+        )
         .then(None)
         .otherwise(pl.col(col).cast(pl.Utf8).str.strip_chars())
         .alias(col)
@@ -48,8 +69,7 @@ def charity_address(df: pl.DataFrame) -> pl.DataFrame:
     available = [pl.col(col) for col in postcode_cols if col in df.columns]
     postcode = pl.coalesce(available) if available else pl.lit(None, dtype=pl.String)
     return df.with_columns(
-        postcode
-        .str.to_uppercase()
+        postcode.str.to_uppercase()
         .str.replace_all(r"\s+", "")
         .alias("charity_postcode")
     )
@@ -61,6 +81,7 @@ def merge_charity_data(
     company_house: pl.DataFrame,
     find_that_charity: pl.DataFrame,
     ons: pl.DataFrame,
+    utla: pl.DataFrame,
 ) -> pl.DataFrame:
     """End-to-end processing and merging of all charity data."""
     charity = clean_charity(charity)
@@ -70,7 +91,9 @@ def merge_charity_data(
     la_lookup = make_postcode_to_local_authority_lookup(ons)
 
     df = (
-        charity.join(charity_class, on="registered_charity_number", how="left", validate="1:1")
+        charity.join(
+            charity_class, on="registered_charity_number", how="left", validate="1:1"
+        )
         .join(
             company_house,
             left_on="charity_company_registration_number",
@@ -78,14 +101,19 @@ def merge_charity_data(
             how="left",
             validate="m:1",
         )
-        .join(find_that_charity, on="registered_charity_number", how="left", validate="1:1")
+        .join(
+            find_that_charity,
+            on="registered_charity_number",
+            how="left",
+            validate="1:1",
+        )
         .with_columns(pl.col(list(CATEGORY_MAPPING)).fill_null(0))
     )
 
     df = charity_address(df)
     df = df.join(la_lookup, on="charity_postcode", how="left", validate="m:1")
 
-    return df
+    return add_utla(df, utla)
 
 
 def load_charity_register(
@@ -94,12 +122,14 @@ def load_charity_register(
     company_house: pl.DataFrame | None = None,
     find_that_charity: pl.DataFrame | None = None,
     ons: pl.DataFrame | None = None,
+    utla: pl.DataFrame | None = None,
     *,
     charity_filepath: Path = CHARITY_FILEPATH,
     classification_filepath: Path = CHARITY_CLASSIFICATION_FILEPATH,
     company_house_filepath: Path = COMPANY_HOUSE_FILEPATH,
     find_that_charity_filepath: Path = FIND_THAT_CHARITY_FILEPATH,
     ons_filepath: Path = ONS_LOOKUP_FILEPATH,
+    utla_filepath: Path = UTLA_LOOKUP_FILEPATH,
 ) -> pl.DataFrame:
     """Load and merge all charity data."""
     if charity is None:
@@ -108,14 +138,20 @@ def load_charity_register(
         charity_class = load_charity_classification(classification_filepath)
     if company_house is None:
         logger.info("Loading Companies House records for charity company numbers")
-        company_numbers = charity.rename(lambda col: col.strip()).select(
-            _company_number_expr("charity_company_registration_number")
-        ).to_series()
-        company_house = load_company_house(company_numbers, filepath=company_house_filepath)
+        company_numbers = (
+            charity.rename(lambda col: col.strip())
+            .select(_company_number_expr("charity_company_registration_number"))
+            .to_series()
+        )
+        company_house = load_company_house(
+            company_numbers, filepath=company_house_filepath
+        )
     if find_that_charity is None:
         find_that_charity = load_find_that_charity(find_that_charity_filepath)
     if ons is None:
         ons = load_ons(ons_filepath)
+    if utla is None:
+        utla = load_utla(utla_filepath)
 
     logger.info("Merging charity, classification, company, and postcode data")
     return merge_charity_data(
@@ -124,6 +160,7 @@ def load_charity_register(
         company_house,
         find_that_charity,
         ons,
+        utla,
     )
 
 
@@ -135,21 +172,25 @@ def build_charity_register(
     company_house_filepath: Path = COMPANY_HOUSE_FILEPATH,
     find_that_charity_filepath: Path = FIND_THAT_CHARITY_FILEPATH,
     ons_filepath: Path = ONS_LOOKUP_FILEPATH,
+    utla_filepath: Path = UTLA_LOOKUP_FILEPATH,
 ) -> Path:
-    """Build from explicit CSV/ONS inputs and save a timestamped register.
+    """Build from explicit CSV/ONS/UTLA inputs and save a timestamped register.
 
     Omitted paths use filepath.py defaults. The ONS input must be a prepared
     Parquet lookup; scripts arrange any required download or preparation.
-    A matching run record records the actual supplied input paths.
+    UTLA input is the extracted postcode-to-UTLA CSV. A matching run record
+    records the actual supplied input paths.
     """
     run_time = datetime.now(timezone.utc)
     started_at = run_time.isoformat()
     inputs = {
-        name: _file_record(path) for name, path in {
+        name: _file_record(path)
+        for name, path in {
             "charity_commission": charity_filepath,
             "charity_classification": classification_filepath,
             "companies_house": company_house_filepath,
             "find_that_charity": find_that_charity_filepath,
+            "utla_lookup": utla_filepath,
         }.items()
     }
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -159,9 +200,12 @@ def build_charity_register(
         company_house_filepath=company_house_filepath,
         find_that_charity_filepath=find_that_charity_filepath,
         ons_filepath=ons_filepath,
+        utla_filepath=utla_filepath,
     )
     inputs["ons_lookup"] = _file_record(ons_filepath)
-    with TemporaryDirectory(dir=output_path.parent, prefix=".charity-register-") as directory:
+    with TemporaryDirectory(
+        dir=output_path.parent, prefix=".charity-register-"
+    ) as directory:
         temporary_path = Path(directory) / output_path.name
         register.write_parquet(temporary_path)
         while True:
@@ -184,7 +228,9 @@ def build_charity_register(
                 },
             }
             temporary_record = Path(directory) / "run.json"
-            temporary_record.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+            temporary_record.write_text(
+                json.dumps(record, indent=2) + "\n", encoding="utf-8"
+            )
             try:
                 # Publish the completed file atomically without replacing any run.
                 os.link(temporary_path, saved_path)
@@ -221,15 +267,22 @@ def latest_charity_register(output_path: Path | None = None) -> Path:
     pattern = re.compile(
         rf"{re.escape(base.stem)}_\d{{8}}_\d{{6}}_\d{{6}}Z{re.escape(base.suffix)}"
     )
-    runs = [
-        path for path in base.parent.iterdir()
-        if path.is_file() and pattern.fullmatch(path.name)
-    ] if base.parent.is_dir() else []
+    runs = (
+        [
+            path
+            for path in base.parent.iterdir()
+            if path.is_file() and pattern.fullmatch(path.name)
+        ]
+        if base.parent.is_dir()
+        else []
+    )
     if runs:
         return max(runs, key=lambda path: path.name)
     if base.is_file():
         return base
-    raise FileNotFoundError(f"No charity register found in {base.parent}; run the core build first")
+    raise FileNotFoundError(
+        f"No charity register found in {base.parent}; run the core build first"
+    )
 
 
 def scan_charity_removals(

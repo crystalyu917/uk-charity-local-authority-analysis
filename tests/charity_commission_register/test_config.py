@@ -39,6 +39,7 @@ class ConfigurationTests(unittest.TestCase):
                 "company_house_filepath": root / "companies.csv",
                 "find_that_charity_filepath": root / "find.csv",
                 "ons_filepath": root / "ons.parquet",
+                "utla_filepath": root / "utla.csv",
             }
             with patch.object(charity, "load_charity_register", return_value=pl.DataFrame({"id": [1]})) as load:
                 saved = charity.build_charity_register(root / "output" / "register.parquet", **paths)
@@ -50,6 +51,7 @@ class ConfigurationTests(unittest.TestCase):
                 ("companies_house", "company_house_filepath"),
                 ("find_that_charity", "find_that_charity_filepath"),
                 ("ons_lookup", "ons_filepath"),
+                ("utla_lookup", "utla_filepath"),
             ):
                 self.assertEqual(record["inputs"][label]["path"], str(paths[argument].resolve()))
 

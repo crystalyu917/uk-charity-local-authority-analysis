@@ -12,6 +12,7 @@ from uk_charity_local_authority_analysis.charity_commission_register import (
     build_charity_register,
 )
 from uk_charity_local_authority_analysis.charity_commission_register.ons import build_ons_postcode_lookup
+from uk_charity_local_authority_analysis.charity_commission_register.utla import latest_utla_lookup
 
 # Edit these inputs and output basename for this run.
 DATA_DIR = PROJECT_ROOT / "data" / "charity_commission_register"
@@ -26,10 +27,13 @@ COMPANY_HOUSE_FILEPATH = DATA_DIR / "company_house" / "28052025_legacy" / "compa
 FIND_THAT_CHARITY_FILEPATH = DATA_DIR / "find_that_charity_28052025_legacy" / "find_that_charity_28052025.csv"
 ONS_LOOKUP_FILEPATH = DATA_DIR / "ons" / DOWNLOAD_DATE / "ons_postcode_lookup.parquet"
 CHARITY_REGISTER_FILEPATH = DATA_DIR / "output" / "charity_register.parquet"
+# None selects the newest dated UTLA download; set a CSV path to pin it.
+UTLA_LOOKUP_FILEPATH = None
 # The builder adds a UTC timestamp and writes a .run.json beside the Parquet.
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    utla_filepath = UTLA_LOOKUP_FILEPATH if UTLA_LOOKUP_FILEPATH is not None else latest_utla_lookup(DATA_DIR / "utla_lookup")
     ons_filepath = build_ons_postcode_lookup(
         output_path=ONS_LOOKUP_FILEPATH,
         source_csv=ONS_SOURCE_CSV_FILEPATH,
@@ -43,5 +47,6 @@ if __name__ == "__main__":
         company_house_filepath=COMPANY_HOUSE_FILEPATH,
         find_that_charity_filepath=FIND_THAT_CHARITY_FILEPATH,
         ons_filepath=ons_filepath,
+        utla_filepath=utla_filepath,
     )
     print(register_filepath)
