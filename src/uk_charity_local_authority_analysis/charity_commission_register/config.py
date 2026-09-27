@@ -1,18 +1,30 @@
-"""Library processing settings and download URLs; local paths live in filepath.py."""
+"""Library processing settings and default download metadata.
+
+Executable scripts may override these defaults. Local paths live in filepath.py.
+"""
 
 CHARITY_COMMISSION_DOWNLOAD_PAGE = "https://register-of-charities.charitycommission.gov.uk/en/register/full-register-download"
 CHARITY_COMMISSION_CHARITY_URL = "https://ccewuksprdoneregsadata1.blob.core.windows.net/data/json/publicextract.charity.zip"
 CHARITY_COMMISSION_CLASSIFICATION_URL = "https://ccewuksprdoneregsadata1.blob.core.windows.net/data/json/publicextract.charity_classification.zip"
+CHARITY_COMMISSION_CHARITY_FILENAME = "publicextract.charity.zip"
+CHARITY_COMMISSION_CLASSIFICATION_FILENAME = "publicextract.charity_classification.zip"
 
-ONS_POSTCODE_LOOKUP_ITEM_ID = "6fff67d204fd4f339591ed667a6e3642"
-ONS_POSTCODE_LOOKUP_URL = (
+ONSPD_POSTCODE_LOOKUP_ITEM_ID = "6fff67d204fd4f339591ed667a6e3642"
+ONSPD_POSTCODE_LOOKUP_URL = (
     "https://www.arcgis.com/sharing/rest/content/items/"
-    f"{ONS_POSTCODE_LOOKUP_ITEM_ID}/data"
+    f"{ONSPD_POSTCODE_LOOKUP_ITEM_ID}/data"
 )
+ONSPD_POSTCODE_LOOKUP_FILENAME = "ONSPD_MAY_2026.zip"
 
 UTLA_LOOKUP_URL = "https://www.arcgis.com/sharing/rest/content/items/bc8f6d1f6ee64111b6a59b22c6605f3b/data"
 UTLA_ARCHIVE_FILENAME = "PCD_OA21_LSOA21_MSOA21_LTLA22_UTLA22_CAUTH22_NOV23_UK_LU_V2.zip"
 UTLA_CSV_FILENAME = "PCD_OA21_LSOA21_MSOA21_LTLA22_UTLA22_CAUTH22_NOV23_UK_LU_v2.csv"
+
+COMPANY_HOUSE_URL = (
+    "https://download.companieshouse.gov.uk/"
+    "BasicCompanyDataAsOneFile-2026-09-01.zip"
+)
+COMPANY_HOUSE_FILENAME = "BasicCompanyDataAsOneFile-2026-09-01.zip"
 
 SMALL_INCOME_LIMIT = 25_000
 MEDIUM_INCOME_LIMIT = 1_000_000

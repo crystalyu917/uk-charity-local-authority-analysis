@@ -1,5 +1,8 @@
 """Companies House CSV loading and company-number normalisation."""
 
+import csv
+import logging
+import re
 from pathlib import Path
 
 import polars as pl
@@ -29,7 +32,45 @@ def load_company_house(company_numbers: pl.Series | None = None, *, filepath: Pa
         companies = companies.filter(
             pl.col("CompanyNumber").is_in(company_numbers.drop_nulls().implode())
         )
-    return companies.collect(engine="streaming")
+    try:
+        return companies.collect(engine="streaming")
+    except pl.exceptions.ComputeError as error:
+        if company_numbers is None or "found more fields than defined" not in str(error):
+            raise
+        logging.getLogger(__name__).warning(
+            "Companies House CSV has inconsistent field counts; retrying with "
+            "row-by-row parsing and validating required company records"
+        )
+        return _load_required_companies(filepath, company_numbers)
+
+
+def _load_required_companies(filepath: Path, company_numbers: pl.Series) -> pl.DataFrame:
+    """Exclude unrelated records before validating widths; never truncate fields."""
+    wanted = set(company_numbers.drop_nulls().to_list())
+    rows = []
+    with filepath.open(encoding="utf-8-sig", newline="") as source:
+        reader = csv.reader(source, strict=True)
+        columns = [column.strip() for column in next(reader)]
+        number_index = columns.index("CompanyNumber")
+        for row in reader:
+            if not row:
+                continue
+            if len(row) <= number_index:
+                raise ValueError(f"Missing company number at {filepath}:{reader.line_num}")
+            number = row[number_index].strip().upper()
+            if re.fullmatch(r"\d{1,8}", number):
+                number = number.zfill(8)
+            if number not in wanted:
+                continue
+            if len(row) != len(columns):
+                raise ValueError(
+                    f"Invalid Companies House record for {number} at "
+                    f"{filepath}:{reader.line_num}: expected {len(columns)} "
+                    f"fields, found {len(row)}"
+                )
+            row[number_index] = number
+            rows.append([value if value else None for value in row])
+    return pl.DataFrame(rows, schema={column: pl.String for column in columns}, orient="row")
 
 
 def clean_company_house(company_house: pl.DataFrame) -> pl.DataFrame:

@@ -30,15 +30,15 @@ from uk_charity_local_authority_analysis.charity_commission_register.filepath im
     CHARITY_REGISTER_FILEPATH,
     COMPANY_HOUSE_FILEPATH,
     FIND_THAT_CHARITY_FILEPATH,
-    ONS_LOOKUP_FILEPATH,
+    ONSPD_LOOKUP_FILEPATH,
     UTLA_LOOKUP_FILEPATH,
 )
 from uk_charity_local_authority_analysis.charity_commission_register.find_that_charity import (
     clean_find_that_charity,
     load_find_that_charity,
 )
-from uk_charity_local_authority_analysis.charity_commission_register.ons import (
-    load_ons,
+from uk_charity_local_authority_analysis.charity_commission_register.onspd import (
+    load_onspd,
     make_postcode_to_local_authority_lookup,
 )
 
@@ -80,7 +80,7 @@ def merge_charity_data(
     charity_class: pl.DataFrame,
     company_house: pl.DataFrame,
     find_that_charity: pl.DataFrame,
-    ons: pl.DataFrame,
+    onspd: pl.DataFrame,
     utla: pl.DataFrame,
 ) -> pl.DataFrame:
     """End-to-end processing and merging of all charity data."""
@@ -88,7 +88,7 @@ def merge_charity_data(
     charity_class = clean_charity_classification(charity_class)
     company_house = clean_company_house(company_house)
     find_that_charity = clean_find_that_charity(find_that_charity)
-    la_lookup = make_postcode_to_local_authority_lookup(ons)
+    la_lookup = make_postcode_to_local_authority_lookup(onspd)
 
     df = (
         charity.join(
@@ -121,14 +121,14 @@ def load_charity_register(
     charity_class: pl.DataFrame | None = None,
     company_house: pl.DataFrame | None = None,
     find_that_charity: pl.DataFrame | None = None,
-    ons: pl.DataFrame | None = None,
+    onspd: pl.DataFrame | None = None,
     utla: pl.DataFrame | None = None,
     *,
     charity_filepath: Path = CHARITY_FILEPATH,
     classification_filepath: Path = CHARITY_CLASSIFICATION_FILEPATH,
     company_house_filepath: Path = COMPANY_HOUSE_FILEPATH,
     find_that_charity_filepath: Path = FIND_THAT_CHARITY_FILEPATH,
-    ons_filepath: Path = ONS_LOOKUP_FILEPATH,
+    onspd_filepath: Path = ONSPD_LOOKUP_FILEPATH,
     utla_filepath: Path = UTLA_LOOKUP_FILEPATH,
 ) -> pl.DataFrame:
     """Load and merge all charity data."""
@@ -148,8 +148,8 @@ def load_charity_register(
         )
     if find_that_charity is None:
         find_that_charity = load_find_that_charity(find_that_charity_filepath)
-    if ons is None:
-        ons = load_ons(ons_filepath)
+    if onspd is None:
+        onspd = load_onspd(onspd_filepath)
     if utla is None:
         utla = load_utla(utla_filepath)
 
@@ -159,7 +159,7 @@ def load_charity_register(
         charity_class,
         company_house,
         find_that_charity,
-        ons,
+        onspd,
         utla,
     )
 
@@ -171,12 +171,12 @@ def build_charity_register(
     classification_filepath: Path = CHARITY_CLASSIFICATION_FILEPATH,
     company_house_filepath: Path = COMPANY_HOUSE_FILEPATH,
     find_that_charity_filepath: Path = FIND_THAT_CHARITY_FILEPATH,
-    ons_filepath: Path = ONS_LOOKUP_FILEPATH,
+    onspd_filepath: Path = ONSPD_LOOKUP_FILEPATH,
     utla_filepath: Path = UTLA_LOOKUP_FILEPATH,
 ) -> Path:
-    """Build from explicit CSV/ONS/UTLA inputs and save a timestamped register.
+    """Build from explicit CSV/ONSPD/UTLA inputs and save a timestamped register.
 
-    Omitted paths use filepath.py defaults. The ONS input must be a prepared
+    Omitted paths use filepath.py defaults. The ONSPD input must be a prepared
     Parquet lookup; scripts arrange any required download or preparation.
     UTLA input is the extracted postcode-to-UTLA CSV. A matching run record
     records the actual supplied input paths.
@@ -199,10 +199,10 @@ def build_charity_register(
         classification_filepath=classification_filepath,
         company_house_filepath=company_house_filepath,
         find_that_charity_filepath=find_that_charity_filepath,
-        ons_filepath=ons_filepath,
+        onspd_filepath=onspd_filepath,
         utla_filepath=utla_filepath,
     )
-    inputs["ons_lookup"] = _file_record(ons_filepath)
+    inputs["onspd_lookup"] = _file_record(onspd_filepath)
     with TemporaryDirectory(
         dir=output_path.parent, prefix=".charity-register-"
     ) as directory:
@@ -219,7 +219,10 @@ def build_charity_register(
                 "started_at_utc": started_at,
                 "completed_at_utc": datetime.now(timezone.utc).isoformat(),
                 "inputs": inputs,
-                "ons": {"mode": "local_parquet", "path": str(ons_filepath.resolve())},
+                "onspd": {
+                    "mode": "local_parquet",
+                    "path": str(onspd_filepath.resolve()),
+                },
                 "output": {
                     "path": str(saved_path.resolve()),
                     "size_bytes": temporary_path.stat().st_size,

@@ -1,6 +1,7 @@
 """Download and extract all datasets, or only the supplied source names."""
 
 import argparse
+from collections.abc import Mapping
 from datetime import date
 import logging
 from pathlib import Path
@@ -10,11 +11,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from uk_charity_local_authority_analysis.charity_commission_register.config import (
+    CHARITY_COMMISSION_CHARITY_FILENAME,
     CHARITY_COMMISSION_CHARITY_URL,
+    CHARITY_COMMISSION_CLASSIFICATION_FILENAME,
     CHARITY_COMMISSION_CLASSIFICATION_URL,
-    ONS_POSTCODE_LOOKUP_URL,
-    UTLA_LOOKUP_URL,
+    COMPANY_HOUSE_FILENAME,
+    COMPANY_HOUSE_URL,
+    ONSPD_POSTCODE_LOOKUP_FILENAME,
+    ONSPD_POSTCODE_LOOKUP_URL,
     UTLA_ARCHIVE_FILENAME,
+    UTLA_LOOKUP_URL,
 )
 from uk_charity_local_authority_analysis.charity_commission_register.download_and_extract import (
     download_file,
@@ -22,23 +28,47 @@ from uk_charity_local_authority_analysis.charity_commission_register.download_an
 )
 
 DATA_DIR = PROJECT_ROOT / "data" / "charity_commission_register"
-# Source name: URL, source directory, filename. The download date is appended.
-SOURCES = {
+type Source = tuple[str, Path, str]
+
+# Library defaults. The local download date is appended to each directory.
+DEFAULT_SOURCES: dict[str, Source] = {
     "utla": (UTLA_LOOKUP_URL, DATA_DIR / "utla_lookup", UTLA_ARCHIVE_FILENAME),
-    "ons": (ONS_POSTCODE_LOOKUP_URL, DATA_DIR / "ons", "ONSPD_MAY_2026.zip"),
+    "onspd": (
+        ONSPD_POSTCODE_LOOKUP_URL,
+        DATA_DIR / "onspd",
+        ONSPD_POSTCODE_LOOKUP_FILENAME,
+    ),
     "charity": (
-        CHARITY_COMMISSION_CHARITY_URL, DATA_DIR / "charity_commission", "publicextract.charity.zip",
+        CHARITY_COMMISSION_CHARITY_URL,
+        DATA_DIR / "charity_commission",
+        CHARITY_COMMISSION_CHARITY_FILENAME,
     ),
     "classification": (
-        CHARITY_COMMISSION_CLASSIFICATION_URL, DATA_DIR / "charity_commission",
-        "publicextract.charity_classification.zip",
+        CHARITY_COMMISSION_CLASSIFICATION_URL,
+        DATA_DIR / "charity_commission",
+        CHARITY_COMMISSION_CLASSIFICATION_FILENAME,
     ),
     "company_house": (
-        "https://download.companieshouse.gov.uk/BasicCompanyDataAsOneFile-2026-09-01.zip",
+        COMPANY_HOUSE_URL,
         DATA_DIR / "company_house",
-        "BasicCompanyDataAsOneFile-2026-09-01.zip",
+        COMPANY_HOUSE_FILENAME,
     ),
 }
+
+# Edit only this mapping to replace a default or add a source for this script.
+# Supply the complete (URL, destination directory, filename) tuple so dated URLs
+# and filenames are updated together. Overrides win over DEFAULT_SOURCES.
+SOURCE_OVERRIDES: dict[str, Source] = {}
+
+
+def resolve_sources(
+    defaults: Mapping[str, Source], overrides: Mapping[str, Source],
+) -> dict[str, Source]:
+    """Return source definitions with script overrides applied last."""
+    return {**defaults, **overrides}
+
+
+SOURCES = resolve_sources(DEFAULT_SOURCES, SOURCE_OVERRIDES)
 
 
 def main() -> int:

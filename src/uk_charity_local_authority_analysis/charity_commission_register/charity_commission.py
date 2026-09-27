@@ -1,4 +1,4 @@
-"""Charity Commission archive extraction, CSV loading, and preparation."""
+"""Charity Commission archive extraction, CSV/JSON loading, and preparation."""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -59,10 +59,17 @@ def extract_charity_commission(
 
 
 def load_charity(filepath: Path = CHARITY_FILEPATH) -> pl.DataFrame:
+    """Load a current JSON extract or a legacy CSV snapshot."""
+    if Path(filepath).suffix.lower() == ".json":
+        # Match the legacy CSV string schema; cleaners convert dates and numbers.
+        return pl.read_json(filepath, infer_schema_length=None).cast(pl.String)
     return pl.read_csv(filepath, infer_schema=False)
 
 
 def load_charity_classification(filepath: Path = CHARITY_CLASSIFICATION_FILEPATH) -> pl.DataFrame:
+    """Load current JSON classifications or a legacy CSV snapshot."""
+    if Path(filepath).suffix.lower() == ".json":
+        return pl.read_json(filepath, infer_schema_length=None).cast(pl.String)
     return pl.read_csv(filepath, infer_schema=False)
 
 

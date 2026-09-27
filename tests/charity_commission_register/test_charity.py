@@ -16,6 +16,35 @@ from uk_charity_local_authority_analysis.charity_commission_register import char
 
 
 class CharityPipelineTests(unittest.TestCase):
+    def test_csv_and_json_sources_clean_to_equivalent_records(self):
+        charities = [{
+            "registered_charity_number": 200001,
+            "linked_charity_number": 0,
+            "charity_company_registration_number": "00123456",
+            "date_of_registration": "2020-04-01T00:00:00",
+            "date_of_removal": None,
+            "charity_has_land": True,
+            "latest_income": 25000.5,
+        }]
+        classifications = [{
+            "registered_charity_number": 200001,
+            "classification_description": "Makes Grants To Individuals",
+        }]
+        with TemporaryDirectory() as directory:
+            for records, loader, cleaner in (
+                (charities, charity_commission.load_charity, charity_commission.clean_charity),
+                (classifications, charity_commission.load_charity_classification,
+                 charity_commission.clean_charity_classification),
+            ):
+                csv_path = Path(directory) / "source.csv"
+                json_path = Path(directory) / "source.JSON"
+                pl.DataFrame(records).write_csv(csv_path)
+                # The current public extracts contain a UTF-8 BOM.
+                json_path.write_text(json.dumps(records), encoding="utf-8-sig")
+                csv_result = cleaner(loader(csv_path))
+                json_result = cleaner(loader(json_path)).select(csv_result.columns)
+                self.assertTrue(csv_result.equals(json_result))
+
     def test_merge_keeps_main_records_and_register_namespaces(self):
         charities = pl.DataFrame({
             "registered_charity_number": ["1", "1", "2", "3"],
@@ -40,7 +69,7 @@ class CharityPipelineTests(unittest.TestCase):
             "source": ["ccew", "ccni", "ccew", "ccew"],
             "postalCode": ["OTHER", "WRONG", None, "xy1\t2zz"],
         })
-        ons = pl.DataFrame({
+        onspd = pl.DataFrame({
             "pcds": ["SW1A 1AA", "AB1 2CD", "XY1 2ZZ"],
             "lad25cd": ["LAD1", "LAD2", "LAD3"],
         })
@@ -50,7 +79,7 @@ class CharityPipelineTests(unittest.TestCase):
             "utla22nm": ["Authority One", "Authority Two"],
         })
         result = core.load_charity_register(
-            charities, classifications, companies, ftc, ons, utla
+            charities, classifications, companies, ftc, onspd, utla
         ).sort("registered_charity_number")
         self.assertEqual(result.height, 3)
         self.assertEqual(result["local_authority_code"].to_list(), ["LAD1", "LAD2", "LAD3"])
@@ -60,7 +89,7 @@ class CharityPipelineTests(unittest.TestCase):
             lookup_path = Path(directory) / "utla.csv"
             utla.write_csv(lookup_path)
             loaded = core.load_charity_register(
-                charities, classifications, companies, ftc, ons, utla_filepath=lookup_path,
+                charities, classifications, companies, ftc, onspd, utla_filepath=lookup_path,
             ).sort("registered_charity_number")
             self.assertTrue(loaded.equals(result))
         self.assertEqual(result["charity_status"].to_list(), ["active", "inactive", "active"])
@@ -89,6 +118,20 @@ class CharityPipelineTests(unittest.TestCase):
     def test_missing_postcode_columns_produce_null(self):
         result = core.charity_address(pl.DataFrame({"id": [1]}))
         self.assertIsNone(result["charity_postcode"][0])
+
+    def test_company_csv_fallback_validates_required_records(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "companies.csv"
+            path.write_text(
+                ' CompanyNumber,RegAddress.PostCode\n'
+                '00123456,"AB1 2CD"\nSC123456,XY1 2ZZ,extra\n'
+            )
+            result = company_house.load_company_house(pl.Series(["00123456"]), filepath=path)
+            self.assertEqual(result.to_dicts(), [{
+                "CompanyNumber": "00123456", "RegAddress.PostCode": "AB1 2CD",
+            }])
+            with self.assertRaisesRegex(ValueError, "SC123456.*expected 2 fields, found 3"):
+                company_house.load_company_house(pl.Series(["SC123456"]), filepath=path)
 
     def test_supported_dates(self):
         values = ["2020-04-01T00:00:00", "2020-04-01", "01/04/2020", "01-04-2020", "2020/04/01", "20200401", "bad", None]
@@ -132,7 +175,9 @@ class CharityPipelineTests(unittest.TestCase):
             self.assertEqual(record["output"]["rows"], 1)
             self.assertEqual(record["output"]["size_bytes"], second.stat().st_size)
             self.assertEqual(record["inputs"]["charity_commission"]["path"], str(core.CHARITY_FILEPATH.resolve()))
-            self.assertEqual(record["ons"]["path"], str(core.ONS_LOOKUP_FILEPATH.resolve()))
+            self.assertEqual(
+                record["onspd"]["path"], str(core.ONSPD_LOOKUP_FILEPATH.resolve())
+            )
             self.assertTrue(first.with_suffix(".run.json").is_file())
             self.assertEqual(core.latest_charity_register(base), second)
             with patch.object(core, "CHARITY_REGISTER_FILEPATH", base):

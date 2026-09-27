@@ -1,4 +1,4 @@
-"""ONS archive extraction, postcode lookup preparation, and register geography."""
+"""ONSPD archive extraction, postcode lookup preparation, and geography."""
 
 import csv
 import re
@@ -11,14 +11,14 @@ from zipfile import ZipFile
 import polars as pl
 
 from uk_charity_local_authority_analysis.charity_commission_register.download_and_extract import extract_zip_members
-from uk_charity_local_authority_analysis.charity_commission_register.filepath import ONS_ARCHIVE_FILEPATH, ONS_LOOKUP_FILEPATH, ONS_SOURCE_CSV_FILEPATH
+from uk_charity_local_authority_analysis.charity_commission_register.filepath import ONSPD_ARCHIVE_FILEPATH, ONSPD_LOOKUP_FILEPATH, ONSPD_SOURCE_CSV_FILEPATH
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
 
 _AREA_SCHEMA: Final = pl.Struct({"code": pl.String, "name": pl.String})
-ONS_POSTCODE_LOOKUP_SCHEMA: Final[pl.Schema] = pl.Schema(
+ONSPD_POSTCODE_LOOKUP_SCHEMA: Final[pl.Schema] = pl.Schema(
     {"pcd": pl.String, "lad": _AREA_SCHEMA, "region": _AREA_SCHEMA}
 )
 
@@ -32,7 +32,7 @@ _LOOKUP_REGION_NAME_PATTERN = re.compile(r"RGN\d{2}NM")
 
 
 @dataclass(frozen=True, slots=True)
-class OnsPostcodeLookupFiles:
+class OnspdPostcodeLookupFiles:
     """Paths to the three selectively extracted source CSV files."""
 
     postcode: Path
@@ -40,12 +40,12 @@ class OnsPostcodeLookupFiles:
     region: Path
 
 
-def extract_ons_postcode_lookup(
+def extract_onspd_postcode_lookup(
     dest_dir: Path | None = None,
     *,
-    archive_filepath: Path = ONS_ARCHIVE_FILEPATH,
-) -> OnsPostcodeLookupFiles:
-    """Extract only postcode, LAD, and region CSVs from a local ONS archive.
+    archive_filepath: Path = ONSPD_ARCHIVE_FILEPATH,
+) -> OnspdPostcodeLookupFiles:
+    """Extract only postcode, LAD, and region CSVs from a local ONSPD archive.
 
     Reuse matching-size extracted files beneath the archive-named directory.
     dest_dir overrides the archive's parent directory. Pass archive_filepath
@@ -55,7 +55,8 @@ def extract_ons_postcode_lookup(
     archive_path = (dest_dir / archive_filepath.name) if dest_dir is not None else archive_filepath
     if not archive_path.is_file():
         raise FileNotFoundError(
-            f"ONS archive not found: {archive_path}. Run scripts/download_and_extract.py ons first."
+            f"ONSPD archive not found: {archive_path}. "
+            "Run scripts/download_and_extract.py onspd first."
         )
     member_names = _find_source_members(archive_path)
     postcode_path, lad_path, region_path = extract_zip_members(
@@ -63,20 +64,20 @@ def extract_ons_postcode_lookup(
         member_names,
         dest_dir=dest_dir if dest_dir is not None else archive_filepath.parent,
     )
-    return OnsPostcodeLookupFiles(
+    return OnspdPostcodeLookupFiles(
         postcode=postcode_path,
         lad=lad_path,
         region=region_path,
     )
 
 
-def scan_ons_postcode_lookup(
+def scan_onspd_postcode_lookup(
     dest_dir: Path | None = None,
     *,
-    archive_filepath: Path = ONS_ARCHIVE_FILEPATH,
+    archive_filepath: Path = ONSPD_ARCHIVE_FILEPATH,
 ) -> pl.LazyFrame:
     """Build a lazy postcode scan enriched with LAD and region names."""
-    source_files = extract_ons_postcode_lookup(dest_dir=dest_dir, archive_filepath=archive_filepath)
+    source_files = extract_onspd_postcode_lookup(dest_dir=dest_dir, archive_filepath=archive_filepath)
     postcode_columns = _read_csv_columns(source_files.postcode, "postcodes")
     lad_columns = _read_csv_columns(source_files.lad, "LAD lookup")
     region_columns = _read_csv_columns(source_files.region, "region lookup")
@@ -179,24 +180,24 @@ def scan_ons_postcode_lookup(
                 pl.col("_region_name").alias("name"),
             ).alias("region"),
         )
-        .cast(ONS_POSTCODE_LOOKUP_SCHEMA)
+        .cast(ONSPD_POSTCODE_LOOKUP_SCHEMA)
     )
 
 
-def load_ons_postcode_lookup(
+def load_onspd_postcode_lookup(
     dest_dir: Path | None = None,
     *,
-    archive_filepath: Path = ONS_ARCHIVE_FILEPATH,
+    archive_filepath: Path = ONSPD_ARCHIVE_FILEPATH,
 ) -> pl.DataFrame:
     """Load the complete enriched postcode lookup into memory."""
-    return scan_ons_postcode_lookup(dest_dir, archive_filepath=archive_filepath).collect(engine="streaming")
+    return scan_onspd_postcode_lookup(dest_dir, archive_filepath=archive_filepath).collect(engine="streaming")
 
 
-def build_ons_postcode_lookup(
-    output_path: Path = ONS_LOOKUP_FILEPATH,
-    source_csv: Path | None = ONS_SOURCE_CSV_FILEPATH,
+def build_onspd_postcode_lookup(
+    output_path: Path = ONSPD_LOOKUP_FILEPATH,
+    source_csv: Path | None = ONSPD_SOURCE_CSV_FILEPATH,
     *,
-    archive_filepath: Path = ONS_ARCHIVE_FILEPATH,
+    archive_filepath: Path = ONSPD_ARCHIVE_FILEPATH,
 ) -> Path:
     """Create or reuse the compact Parquet postcode lookup.
 
@@ -209,14 +210,14 @@ def build_ons_postcode_lookup(
     """
     source = source_csv
     if source is not None and not source.is_file():
-        raise FileNotFoundError(f"ONS postcode CSV was not found: {source}")
+        raise FileNotFoundError(f"ONSPD postcode CSV was not found: {source}")
 
     if source is None and output_path.is_file():
         return output_path
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if source is None:
-        _write_lookup(scan_ons_postcode_lookup(archive_filepath=archive_filepath), output_path)
+        _write_lookup(scan_onspd_postcode_lookup(archive_filepath=archive_filepath), output_path)
         return output_path
 
     columns = _read_csv_columns(source, "postcodes")
@@ -238,7 +239,7 @@ def build_ons_postcode_lookup(
                 pl.lit(None, dtype=pl.String).alias("name"),
             ).alias("region"),
         )
-        .cast(ONS_POSTCODE_LOOKUP_SCHEMA)
+        .cast(ONSPD_POSTCODE_LOOKUP_SCHEMA)
     )
     _write_lookup(lookup, output_path)
     return output_path
@@ -246,7 +247,7 @@ def build_ons_postcode_lookup(
 
 def _write_lookup(lookup: pl.LazyFrame, output_path: Path) -> None:
     """Only publish a completed Parquet file, since subsequent builds reuse it."""
-    with TemporaryDirectory(dir=output_path.parent, prefix=".ons-lookup-") as directory:
+    with TemporaryDirectory(dir=output_path.parent, prefix=".onspd-lookup-") as directory:
         temporary_path = Path(directory) / output_path.name
         lookup.sink_parquet(temporary_path)
         temporary_path.replace(output_path)
@@ -299,7 +300,7 @@ def _require_archive_member(
 ) -> PurePosixPath:
     if len(matches) != 1:
         raise ValueError(
-            f"Expected exactly one {description} in ONS archive; found {len(matches)}"
+            f"Expected exactly one {description} in ONSPD archive; found {len(matches)}"
         )
     return matches[0]
 
@@ -309,10 +310,10 @@ def _read_csv_columns(data_path: Path, description: str) -> tuple[str, ...]:
         try:
             columns = tuple(next(csv.reader(data_file)))
         except StopIteration as error:
-            raise ValueError(f"ONS {description} CSV is empty") from error
+            raise ValueError(f"ONSPD {description} CSV is empty") from error
 
     if len(set(columns)) != len(columns):
-        raise ValueError(f"ONS {description} CSV contains duplicate columns")
+        raise ValueError(f"ONSPD {description} CSV contains duplicate columns")
     return columns
 
 
@@ -322,7 +323,7 @@ def _require_column(
     description: str,
 ) -> str:
     if expected_column not in columns:
-        raise ValueError(f"ONS {description} column was not found: {expected_column}")
+        raise ValueError(f"ONSPD {description} column was not found: {expected_column}")
     return expected_column
 
 
@@ -334,7 +335,7 @@ def _require_pattern_column(
     matches = [column for column in columns if pattern.fullmatch(column)]
     if len(matches) != 1:
         raise ValueError(
-            f"Expected exactly one ONS {description} column; found {len(matches)}"
+            f"Expected exactly one ONSPD {description} column; found {len(matches)}"
         )
     return matches[0]
 
@@ -352,11 +353,11 @@ def _validate_lookup_vintage(
         or lookup_name_column.upper() != expected_name_column
     ):
         raise ValueError(
-            f"ONS {description} lookup columns do not match the main geography "
+            f"ONSPD {description} lookup columns do not match the main geography "
             f"vintage: expected {expected_code_column} and {expected_name_column}"
         )
 
-def load_ons(filepath: Path = ONS_LOOKUP_FILEPATH) -> pl.DataFrame:
+def load_onspd(filepath: Path = ONSPD_LOOKUP_FILEPATH) -> pl.DataFrame:
     """Load the prepared lookup in the legacy column shape used by this pipeline."""
     return pl.read_parquet(filepath).select(
         pl.col("pcd").alias("pcds"),
@@ -364,8 +365,8 @@ def load_ons(filepath: Path = ONS_LOOKUP_FILEPATH) -> pl.DataFrame:
     )
 
 
-def make_postcode_to_local_authority_lookup(ons: pl.DataFrame) -> pl.DataFrame:
-    return ons.select(
+def make_postcode_to_local_authority_lookup(onspd: pl.DataFrame) -> pl.DataFrame:
+    return onspd.select(
         pl.col("pcds")
         .cast(pl.Utf8)
         .str.strip_chars()

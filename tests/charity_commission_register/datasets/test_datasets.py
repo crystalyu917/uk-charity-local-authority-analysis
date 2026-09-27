@@ -1,4 +1,4 @@
-"""Exercise archive extraction and the ONS pipeline without network access."""
+"""Exercise archive extraction and the ONSPD pipeline without network access."""
 
 import unittest
 from pathlib import Path
@@ -11,16 +11,16 @@ import polars as pl
 from uk_charity_local_authority_analysis.charity_commission_register.download_and_extract import (
     extract_single_file_zip, extract_zip_members,
 )
-from uk_charity_local_authority_analysis.charity_commission_register import ons
+from uk_charity_local_authority_analysis.charity_commission_register import onspd
 
 
 class DatasetTests(unittest.TestCase):
-    def test_missing_ons_archive_does_not_download(self):
+    def test_missing_onspd_archive_does_not_download(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)
             output = root / "lookup.parquet"
-            with self.assertRaisesRegex(FileNotFoundError, "download_and_extract.py ons"):
-                ons.build_ons_postcode_lookup(
+            with self.assertRaisesRegex(FileNotFoundError, "download_and_extract.py onspd"):
+                onspd.build_onspd_postcode_lookup(
                     output_path=output, archive_filepath=root / "missing.zip",
                 )
             self.assertEqual(list(root.iterdir()), [])
@@ -28,18 +28,18 @@ class DatasetTests(unittest.TestCase):
     def test_archive_lookup_joins_names_and_reuses_extraction(self):
         with TemporaryDirectory() as directory:
             destination = Path(directory)
-            archive_path = destination / ons.ONS_ARCHIVE_FILEPATH.name
+            archive_path = destination / onspd.ONSPD_ARCHIVE_FILEPATH.name
             with ZipFile(archive_path, "w") as archive:
                 archive.writestr("Data/ONSPD_MAY_2026_UK.csv", "pcds,lad25cd,rgn25cd\nSW1A 1AA,E09000033,E12000007\nAB1 2CD,X,Y\n")
                 archive.writestr("Documents/LAD Local Authority District names and codes UK test.csv", "LAD25CD,LAD25NM\nE09000033,Westminster\n")
                 archive.writestr("Documents/RGN Region names and codes EN test.csv", "RGN25CD,RGN25NM\nE12000007,London\n")
                 archive.writestr("unused.txt", "do not extract")
-            result = ons.load_ons_postcode_lookup(destination)
-            files = ons.extract_ons_postcode_lookup(destination)
+            result = onspd.load_onspd_postcode_lookup(destination)
+            files = onspd.extract_onspd_postcode_lookup(destination)
             before = files.postcode.stat().st_mtime_ns
-            ons.extract_ons_postcode_lookup(destination)
+            onspd.extract_onspd_postcode_lookup(destination)
             self.assertEqual(files.postcode.stat().st_mtime_ns, before)
-            self.assertEqual(result.schema, ons.ONS_POSTCODE_LOOKUP_SCHEMA)
+            self.assertEqual(result.schema, onspd.ONSPD_POSTCODE_LOOKUP_SCHEMA)
             self.assertEqual(result["lad"][0], {"code": "E09000033", "name": "Westminster"})
             self.assertEqual(result["region"][0], {"code": "E12000007", "name": "London"})
             self.assertEqual(result["lad"][1], {"code": "X", "name": None})
@@ -51,7 +51,7 @@ class DatasetTests(unittest.TestCase):
             source = root / "source.csv"
             output = root / "lookup.parquet"
             source.write_text("pcds,lad25cd,rgn25cd\nSW1A 1AA,E09000033,E12000007\n")
-            ons.build_ons_postcode_lookup(output, source)
+            onspd.build_onspd_postcode_lookup(output, source)
             self.assertEqual(pl.read_parquet(output)["lad"][0], {"code": "E09000033", "name": None})
             previous = output.read_bytes()
             def fail_write(frame, path):
@@ -59,7 +59,7 @@ class DatasetTests(unittest.TestCase):
                 raise OSError("write failed")
             with patch.object(pl.LazyFrame, "sink_parquet", fail_write):
                 with self.assertRaises(OSError):
-                    ons.build_ons_postcode_lookup(output, source)
+                    onspd.build_onspd_postcode_lookup(output, source)
             self.assertEqual(output.read_bytes(), previous)
 
     def test_single_file_extraction_repairs_truncated_cache(self):
