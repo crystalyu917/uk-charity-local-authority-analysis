@@ -1,7 +1,8 @@
 """Shared file downloads and ZIP extraction.
 
 scripts/download_and_extract.py selects sources and dated destinations, then calls
-download_file and extract_zip with refresh=True on every run. These library
+download_file and extract_zip with the JSON downloads.overwrite setting
+(default True). These library
 helpers default to cache reuse for callers that do not request a refresh.
 Extraction reads local files; only download_file uses the
 network. Companies House ZIPs use the same generic extraction as other sources.
@@ -155,7 +156,7 @@ def extract_zip(zip_path: str | Path, *, refresh: bool = False) -> tuple[Path, .
     previous extraction directory, including same-size files and obsolete members.
     If extraction fails, the previous directory remains untouched. Publication
     uses two renames, with rollback attempted if the second rename fails.
-    The download script passes refresh=True even for same-day reruns.
+    The download script defaults to refresh=True, configurable in config.json.
 
     Return final extracted file paths in archive order. This function does not
     download the archive or convert extracted files into register inputs.
@@ -323,7 +324,7 @@ def download_file(
     request. With refresh=True, fetch it again even if it already exists; only
     replace the destination after the response has been written successfully.
     A failed download leaves the previous file intact. Extraction is a separate
-    call to extract_zip; scripts/download_and_extract.py performs both with refresh=True.
+    call to extract_zip; the download script configures refresh through config.json.
 
     Parameters
     ----------

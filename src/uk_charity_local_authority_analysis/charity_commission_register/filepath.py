@@ -8,6 +8,8 @@ from datetime import date
 from pathlib import Path
 
 from uk_charity_local_authority_analysis.charity_commission_register.config import (
+    DEFAULT_DATA_DIR,
+    PROJECT_ROOT,
     CHARITY_COMMISSION_CHARITY_FILENAME,
     CHARITY_COMMISSION_CLASSIFICATION_FILENAME,
     ONSPD_POSTCODE_LOOKUP_FILENAME,
@@ -15,8 +17,6 @@ from uk_charity_local_authority_analysis.charity_commission_register.config impo
     UTLA_CSV_FILENAME,
 )
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_DATA_DIR = PROJECT_ROOT / "data" / "charity_commission_register"
 DEFAULT_STAGING_DIR = DEFAULT_DATA_DIR / "staging"
 OUTPUT_DIR = DEFAULT_DATA_DIR / "output"
 # Local date, evaluated on import. Set a DDMMYYYY string for an older snapshot.

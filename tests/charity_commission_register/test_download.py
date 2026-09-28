@@ -15,38 +15,40 @@ from uk_charity_local_authority_analysis.charity_commission_register.download_an
 class DownloadTests(unittest.TestCase):
     def test_script_sources_use_library_defaults(self):
         self.assertEqual(
-            download_script.DEFAULT_SOURCES["onspd"],
+            config.DOWNLOAD_SOURCES["onspd"],
             (
                 config.ONSPD_POSTCODE_LOOKUP_URL,
-                download_script.DATA_DIR / "onspd",
+                config.DEFAULT_DATA_DIR / "onspd",
                 config.ONSPD_POSTCODE_LOOKUP_FILENAME,
             ),
         )
         self.assertEqual(
-            download_script.DEFAULT_SOURCES["company_house"],
+            config.DOWNLOAD_SOURCES["company_house"],
             (
                 config.COMPANY_HOUSE_URL,
-                download_script.DATA_DIR / "company_house",
+                config.DEFAULT_DATA_DIR / "company_house",
                 config.COMPANY_HOUSE_FILENAME,
             ),
         )
 
-    def test_script_source_overrides_replace_defaults_and_add_sources(self):
-        defaults = {
-            "existing": ("https://example.org/old.zip", Path("old"), "old.zip"),
-            "unchanged": ("https://example.org/same.zip", Path("same"), "same.zip"),
-        }
-        overrides = {
-            "existing": ("https://example.org/new.zip", Path("new"), "new.zip"),
-            "additional": ("https://example.org/extra.zip", Path("extra"), "extra.zip"),
-        }
-
-        sources = download_script.resolve_sources(defaults, overrides)
-
-        self.assertEqual(sources["existing"], overrides["existing"])
-        self.assertEqual(sources["additional"], overrides["additional"])
-        self.assertEqual(sources["unchanged"], defaults["unchanged"])
-        self.assertEqual(defaults["existing"][2], "old.zip")
+    def test_script_uses_configured_sources_without_script_edits(self):
+        with TemporaryDirectory() as directory:
+            folder = Path(directory)
+            sources = {"custom": ("https://example.org/new.zip", folder, "new.zip")}
+            with (
+                patch.object(config, "DOWNLOAD_SOURCES", sources),
+                patch.object(download_script.sys, "argv", ["download_and_extract.py", "custom"]),
+                patch.object(download_script, "download_file", return_value=folder / "new.zip") as download,
+                patch.object(download_script, "extract_zip", return_value=()) as extract,
+                patch("builtins.print"),
+            ):
+                self.assertEqual(download_script.main(), 0)
+            download.assert_called_once_with(
+                "https://example.org/new.zip",
+                dest_dir=folder / download_script.date.today().strftime("%d%m%Y"),
+                filename="new.zip", refresh=True,
+            )
+            extract.assert_called_once_with(folder / "new.zip", refresh=True)
 
     def test_filepath_defaults_use_config_filenames(self):
         self.assertEqual(filepath.ONSPD_ARCHIVE_FILEPATH.name, config.ONSPD_POSTCODE_LOOKUP_FILENAME)

@@ -1,7 +1,6 @@
-"""Library processing settings and default download metadata.
+"""Built-in library defaults. Configure workflow overrides in root config.json."""
 
-Executable scripts may override these defaults. Local paths live in filepath.py.
-"""
+from pathlib import Path
 
 CHARITY_COMMISSION_DOWNLOAD_PAGE = "https://register-of-charities.charitycommission.gov.uk/en/register/full-register-download"
 CHARITY_COMMISSION_CHARITY_URL = "https://ccewuksprdoneregsadata1.blob.core.windows.net/data/json/publicextract.charity.zip"
@@ -25,6 +24,36 @@ COMPANY_HOUSE_URL = (
     "BasicCompanyDataAsOneFile-2026-09-01.zip"
 )
 COMPANY_HOUSE_FILENAME = "BasicCompanyDataAsOneFile-2026-09-01.zip"
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+DEFAULT_DATA_DIR = PROJECT_ROOT / "data" / "charity_commission_register"
+type Source = tuple[str, Path, str]
+
+# Download source definitions. The local download date is appended to each directory.
+DOWNLOAD_SOURCES: dict[str, Source] = {
+    "utla": (UTLA_LOOKUP_URL, DEFAULT_DATA_DIR / "utla_lookup", UTLA_ARCHIVE_FILENAME),
+    "onspd": (
+        ONSPD_POSTCODE_LOOKUP_URL,
+        DEFAULT_DATA_DIR / "onspd",
+        ONSPD_POSTCODE_LOOKUP_FILENAME,
+    ),
+    "charity": (
+        CHARITY_COMMISSION_CHARITY_URL,
+        DEFAULT_DATA_DIR / "charity_commission",
+        CHARITY_COMMISSION_CHARITY_FILENAME,
+    ),
+    "classification": (
+        CHARITY_COMMISSION_CLASSIFICATION_URL,
+        DEFAULT_DATA_DIR / "charity_commission",
+        CHARITY_COMMISSION_CLASSIFICATION_FILENAME,
+    ),
+    "company_house": (
+        COMPANY_HOUSE_URL,
+        DEFAULT_DATA_DIR / "company_house",
+        COMPANY_HOUSE_FILENAME,
+    ),
+}
+
 
 SMALL_INCOME_LIMIT = 25_000
 MEDIUM_INCOME_LIMIT = 1_000_000

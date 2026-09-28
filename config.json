@@ -1,0 +1,62 @@
+{
+  "downloads": {
+    "overwrite": true,
+    "sources": {
+      "utla": {
+        "url": "https://www.arcgis.com/sharing/rest/content/items/bc8f6d1f6ee64111b6a59b22c6605f3b/data",
+        "directory": "data/charity_commission_register/utla_lookup",
+        "filename": "PCD_OA21_LSOA21_MSOA21_LTLA22_UTLA22_CAUTH22_NOV23_UK_LU_V2.zip"
+      },
+      "onspd": {
+        "url": "https://www.arcgis.com/sharing/rest/content/items/6fff67d204fd4f339591ed667a6e3642/data",
+        "directory": "data/charity_commission_register/onspd",
+        "filename": "ONSPD_MAY_2026.zip"
+      },
+      "charity": {
+        "url": "https://ccewuksprdoneregsadata1.blob.core.windows.net/data/json/publicextract.charity.zip",
+        "directory": "data/charity_commission_register/charity_commission",
+        "filename": "publicextract.charity.zip"
+      },
+      "classification": {
+        "url": "https://ccewuksprdoneregsadata1.blob.core.windows.net/data/json/publicextract.charity_classification.zip",
+        "directory": "data/charity_commission_register/charity_commission",
+        "filename": "publicextract.charity_classification.zip"
+      },
+      "company_house": {
+        "url": "https://download.companieshouse.gov.uk/BasicCompanyDataAsOneFile-2026-09-01.zip",
+        "directory": "data/charity_commission_register/company_house",
+        "filename": "BasicCompanyDataAsOneFile-2026-09-01.zip"
+      }
+    }
+  },
+  "build": {
+    "target": "latest",
+    "targets": {
+      "latest": {
+        "download_date": "13092026",
+        "charity_filepath": "data/charity_commission_register/charity_commission/{download_date}/publicextract.charity/publicextract.charity.json",
+        "classification_filepath": "data/charity_commission_register/charity_commission/{download_date}/publicextract.charity_classification/publicextract.charity_classification.json",
+        "company_house_filepath": "data/charity_commission_register/company_house/{download_date}/BasicCompanyDataAsOneFile-2026-09-01/BasicCompanyDataAsOneFile-2026-09-01.csv",
+        "find_that_charity_filepath": "data/charity_commission_register/find_that_charity_28052025_legacy/find_that_charity_28052025.csv",
+        "onspd_archive_filepath": "data/charity_commission_register/onspd/{download_date}/ONSPD_MAY_2026.zip",
+        "onspd_source_csv_filepath": null,
+        "onspd_lookup_filepath": "data/charity_commission_register/onspd/{download_date}/onspd_geography_lookup.parquet",
+        "utla_filepath": null,
+        "utla_directory": "data/charity_commission_register/utla_lookup",
+        "output_path": "data/charity_commission_register/output/charity_register.parquet"
+      },
+      "legacy": {
+        "charity_filepath": "data/charity_commission_register/charity_commission/28052025_legacy/charity_commission_28052025.csv",
+        "classification_filepath": "data/charity_commission_register/charity_commission/28052025_legacy/charity_classification_28052025.csv",
+        "company_house_filepath": "data/charity_commission_register/company_house/28052025_legacy/company_house_28052025.csv",
+        "find_that_charity_filepath": "data/charity_commission_register/find_that_charity_28052025_legacy/find_that_charity_28052025.csv",
+        "onspd_archive_filepath": "data/charity_commission_register/onspd/{today}/ONSPD_MAY_2026.zip",
+        "onspd_source_csv_filepath": null,
+        "onspd_lookup_filepath": "data/charity_commission_register/onspd/{today}/onspd_geography_lookup.parquet",
+        "utla_filepath": null,
+        "utla_directory": "data/charity_commission_register/utla_lookup",
+        "output_path": "data/charity_commission_register/output/charity_register.parquet"
+      }
+    }
+  }
+}
