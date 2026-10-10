@@ -1,0 +1,27 @@
+[project]
+name = "charity-lease"
+version = "0.1.0"
+description = "Charity lease analysis pipeline"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "polars>=1.44.1",
+]
+
+[project.scripts]
+charity-lease-match = "charity_lease.cli.run_charity_pipeline:main"
+
+[project.optional-dependencies]
+analysis = [
+    "pandas>=2.2",
+    "pyarrow>=18",
+    "numpy>=2",
+    "matplotlib>=3.9",
+    "jinja2>=3.1",
+    "jupyterlab>=4",
+    "nbclient>=0.10",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.19,<0.12.0"]
+build-backend = "uv_build"
