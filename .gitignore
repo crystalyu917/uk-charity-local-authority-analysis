@@ -22,3 +22,4 @@ data/**/*
 *.txt
 *.odt
 *.zip
+!config.json

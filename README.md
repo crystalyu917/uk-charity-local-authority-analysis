@@ -15,7 +15,7 @@ under `projects/`.
 The repository includes both a latest charity register and a legacy register.
 The latest source data no longer includes addresses for charities that have
 been removed from the register. Because these addresses are still needed for
-some analyses, the legacy build script and legacy datasets are retained. The
+some analyses, the legacy build target and legacy datasets are retained. The
 legacy dataset is the most recent downloaded dataset that still contains this
 information. It is available in the [shared legacy dataset folder](https://drive.google.com/drive/folders/1jLyCxNoDJmrcjkQQYx_yZM3h2lTKfNPy?usp=sharing).
 
@@ -40,12 +40,79 @@ information. It is available in the [shared legacy dataset folder](https://drive
 Run commands from the repository root with Python 3.14 or newer and `uv` installed:
 
 ```powershell
-uv sync --locked --all-groups
+uv sync --locked --all-packages --all-groups
 ```
 
-This creates the project environment and installs the dependencies defined in
-`pyproject.toml`. Once the setup is complete, you can download and build the charity
-register using the instructions below.
+This installs the root package, both analysis projects, and their dependencies.
+All three packages share one `uv.lock` and `.venv` in a
+[uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/).
+
+## Choose a workflow
+
+The repository has one shared data pipeline at the root and two analysis projects
+under `projects/`. Run the commands below from the repository root.
+
+| Workflow | Location | Purpose |
+| --- | --- | --- |
+| Root charity register pipeline | `scripts/` and `src/` | Download source datasets and build the shared charity register. |
+| Charity lease project | `projects/charity_lease/` | Match a prepared charity register to property and lease records, then estimate remaining lease terms. |
+| Council asset sales project | `projects/council_asset_sales/` | Download council receipts and build a panel relating asset disposal receipts to charity removals. |
+
+### Root: download and build the charity register
+
+The root workflow runs Python scripts directly:
+
+```powershell
+# Show options for downloading the shared source datasets
+uv run python scripts/download_and_extract.py --help
+
+# Show options for building the shared charity register
+uv run python scripts/build_charity_register.py --help
+```
+
+Follow [Download dataset](#download-dataset) and [Build the register](#build-the-register)
+below to run this workflow and configure its inputs.
+
+### Project 1: charity lease
+
+`--package charity-lease` selects the package in `projects/charity_lease/`:
+
+```powershell
+# Show options for matching charities to property and lease records
+uv run --package charity-lease charity-lease-match --help
+
+# Show options for adding remaining lease term estimates to matched records
+uv run --package charity-lease charity-lease-terms --help
+```
+
+See the [charity lease README](projects/charity_lease/README.md) for inputs and usage.
+
+### Project 2: council asset sales
+
+`--package council-asset-sales` selects the package in `projects/council_asset_sales/`:
+
+```powershell
+# Show options for downloading council receipts
+uv run --package council-asset-sales council-asset-sales-download --help
+
+# Show options for building the council receipts and charity removals panel
+uv run --package council-asset-sales council-asset-sales-build --help
+```
+
+See the [council asset sales README](projects/council_asset_sales/README.md) for inputs and usage.
+
+The `--help` commands above display usage without running a download or build.
+Both analysis projects require a prepared charity register in their own
+`datasets/charity_register_inputs/` folder; copy a selected root output there or
+supply a compatible register as described in each project's README.
+
+### Working with the shared environment
+
+Inside either project directory, `uv run <command>` selects that member directly.
+Use `uv run --all-packages --group notebooks jupyter lab` for notebooks that import
+the project packages. Run `uv lock` after changing any member's dependencies.
+Project data stays in its existing directories, outside the packages; default
+data paths assume uv's editable workspace installation in this checkout.
 
 
 ## Download dataset
@@ -88,41 +155,31 @@ The `onspd` source is distinct from ONS data generally. Its processed file,
 
 ### Add or change a download source
 
-Default URLs and filenames are defined in
-[`config.py`](src/uk_charity_local_authority_analysis/charity_commission_register/config.py).
-Default local paths in
-[`filepath.py`](src/uk_charity_local_authority_analysis/charity_commission_register/filepath.py)
-are derived from those filenames.
+Edit the root [`config.json`](config.json), not the Python modules. Its
+`downloads.sources` entries override the built-in defaults by source name and
+field. New sources require `url`, `directory`, and `filename`. Update release URLs
+and filenames together. For example, a source entry looks like:
 
-For a new release or source, edit only `SOURCE_OVERRIDES` in
-[`scripts/download_and_extract.py`](scripts/download_and_extract.py). Each entry
-contains the command-line name and a complete source definition:
-
-```python
-SOURCE_OVERRIDES = {
-    "source_name": (source_url, destination_folder, filename),
+```json
+"company_house": {
+  "url": "https://download.companieshouse.gov.uk/BasicCompanyDataAsOneFile-2026-09-01.zip",
+  "directory": "data/charity_commission_register/company_house",
+  "filename": "BasicCompanyDataAsOneFile-2026-09-01.zip"
 }
 ```
 
-`DEFAULT_SOURCES` is built from the library defaults, then
-`SOURCE_OVERRIDES` is applied. An override with an existing name replaces its
-default completely; a new name adds a source. This means a maintainer can leave
-`config.py` unchanged and update only the script. Always specify the complete
-tuple so a dated URL and filename are changed together.
+`downloads.overwrite` defaults to `true`: downloads and extracted ZIP contents
+are refreshed on reruns. Set it to `false` to reuse cached downloads and extracted
+files. Each source directory receives a local `DDMMYYYY` download-date subfolder.
+Omitted sources keep their built-in defaults; new keys add sources.
 
-The override key becomes the command-line argument:
-
-```powershell
-uv run python scripts/download_and_extract.py source_name
-```
-
-The downloader accepts configured source names, not arbitrary URLs or local
-file paths. To build from an existing local file, set the corresponding input
-filepath in the relevant build script.
+All relative data paths in JSON resolve against the repository root, regardless
+of the working directory. Both scripts accept `--config path/to/config.json` for
+an alternative settings file; its data paths still resolve against the repository.
 
 The latest source data no longer includes addresses for charities that have
 been removed from the register. Because these addresses are still needed for
-some analyses, the legacy build script and legacy datasets are retained. The
+some analyses, the legacy build target and legacy datasets are retained. The
 legacy dataset is the most recent downloaded dataset that still contains this
 information. It is available in the [shared legacy dataset folder](https://drive.google.com/drive/folders/1jLyCxNoDJmrcjkQQYx_yZM3h2lTKfNPy?usp=sharing).
 
@@ -132,17 +189,110 @@ Source preparation and merging live in
 [`src/`](src/), the download and build commands in [`scripts/`](scripts/), and
 local inputs and outputs in `data/charity_commission_register/`.
 
-### Legacy Register
-Before building, supply the legacy CSV snapshots under the relative filepath:
-
-| Source | Relative filepath |
-| --- | --- |
-| Charity Commission | `charity_commission/28052025_legacy/charity_commission_28052025.csv` |
-| Charity Classifications | `charity_commission/28052025_legacy/charity_classification_28052025.csv` |
-| Companies House | `company_house/28052025_legacy/company_house_28052025.csv` |
-| Find That Charity | `find_that_charity_28052025_legacy/find_that_charity_28052025.csv` |
+Both register variants use one script and the same preparation and merge logic.
+Select the default with `build.target` in [`config.json`](config.json), currently
+`"latest"`. The `build.targets.latest` and `build.targets.legacy` objects specify
+the input files, prepared ONSPD output, UTLA directory or pinned CSV, and register
+output basename. Add another named target by copying a target and editing its paths.
 
 ```powershell
-uv run python scripts/build_legacy_charity_register.py
+# Use build.target from config.json
+uv run python scripts/build_charity_register.py
+
+# Override the target for this run
+uv run python scripts/build_charity_register.py --target latest
+uv run python scripts/build_charity_register.py --target legacy
 ```
 
+Set `build.targets.latest.download_date` to a `DDMMYYYY` string (currently
+`"13092026"`) to change the snapshot folder in all paths containing
+`{download_date}`. Omitting the key or setting it to `null` uses today's local date.
+This changes folder dates only; release-specific filenames remain explicit.
+The legacy target does not need this key.
+
+The latest target preserves the previously selected `13092026` downloads: Charity
+Commission JSON and Companies House CSV, plus the retained Find That Charity CSV.
+The legacy target uses the `28052025_legacy` charity, classification, Companies
+House, and Find That Charity CSVs. Both targets currently share the same output
+basename, preserving the existing behavior; set distinct `output_path` values
+if you want separate output series.
+
+The legacy ONSPD paths use `{today}`, expanded to the local date as `DDMMYYYY`.
+Replace this token with a folder date to reuse an older download. Prepare the
+geography downloads before building if needed:
+
+```powershell
+uv run python scripts/download_and_extract.py onspd utla
+```
+
+`utla_filepath: null` selects the newest dated CSV beneath `utla_directory`;
+set a filepath to pin a snapshot. `onspd_source_csv_filepath: null` uses the
+configured archive; set a CSV path to use a standalone postcode source instead.
+The build prepares and reuses `onspd_lookup_filepath`. For a changed postcode
+source, choose a new lookup output path or remove the cached lookup.
+
+Builds use local files and do not download inputs. Download source changes do not
+automatically change a target's pinned input paths: update the target explicitly
+when selecting a new snapshot. `downloads.overwrite` applies only to downloads
+and extraction; register outputs remain timestamped and preserve earlier runs.
+
+## Methodology
+
+The build retains main charity records (`linked_charity_number = 0`), includes
+linked-fund classifications in the parent charity's indicators, and restricts
+Find That Charity records to the Charity Commission register. Missing
+classification flags become zero. Company numbers remain strings, with numeric
+identifiers padded to eight characters.
+
+The charity postcode is the first available value from Companies House,
+Charity Commission, then Find That Charity. Matching ignores case and whitespace.
+ONS supplies the local authority district code; the separate UTLA lookup supplies
+`UTLA` and `UTLA_name`. Unmatched geography remains null. Identical UTLA mappings
+are deduplicated, and conflicting postcode mappings fail validation rather than
+multiply charity rows. LAD geography follows the selected ONS release, while UTLA
+uses 2022 boundaries; neither reconstructs boundaries for each removal date.
+
+Financial years begin in April. Income categories are Small below GBP 25,000,
+Medium from GBP 25,000 through GBP 1,000,000, and Large above GBP 1,000,000.
+Missing income leaves the size category unclassified.
+
+Each successful build saves a new pair of files in
+`data/charity_commission_register/output/`:
+
+```text
+charity_register_<YYYYMMDD_HHMMSS_microsecondsZ>.parquet
+charity_register_<YYYYMMDD_HHMMSS_microsecondsZ>.run.json
+```
+
+The UTC timestamp identifies the run, and earlier outputs are preserved. The
+Parquet contains the register. The JSON records run times, selected input paths
+and file metadata, and output dimensions, providing a record of which local
+snapshots were used.
+
+To read the latest register:
+
+```python
+import polars as pl
+from uk_charity_local_authority_analysis.charity_commission_register.build_charity_register import (
+    latest_charity_register,
+)
+
+register = pl.read_parquet(latest_charity_register())
+```
+
+The same module provides `scan_charity_removals()` to aggregate removals by
+local authority district, financial year, and charity size. It selects the latest
+register by default or accepts a specific file path. Missing sizes are labelled
+`Unknown`; records without a district code or removal year are excluded.
+
+## Development
+
+Install the optional notebook dependencies with `uv sync --locked --group notebooks`.
+Run the shared library tests with:
+
+```powershell
+uv run python -m unittest discover -s tests -t . -v
+```
+
+The tests in [`tests/`](tests/) cover downloads, archive extraction, source
+preparation, postcode matching, and register output behaviour.
