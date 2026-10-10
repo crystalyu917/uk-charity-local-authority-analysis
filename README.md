@@ -285,6 +285,28 @@ local authority district, financial year, and charity size. It selects the lates
 register by default or accepts a specific file path. Missing sizes are labelled
 `Unknown`; records without a district code or removal year are excluded.
 
+## Convert Parquet to CSV
+
+Use the shared converter for files anywhere in the repository:
+
+```powershell
+uv run python -m uk_charity_local_authority_analysis.parquet_to_csv path/to/input.parquet
+uv run python -m uk_charity_local_authority_analysis.parquet_to_csv path/to/input.parquet path/to/output.csv
+```
+
+The default output is beside the input with a `.csv` suffix. Parent directories
+are created as needed; add `--overwrite` to replace an existing CSV. Paths are
+relative to your working directory. Conversion streams through Polars; nested
+columns (such as lists or structs) must be flattened before exporting to CSV.
+
+The same function can be imported by any project or notebook:
+
+```python
+from uk_charity_local_authority_analysis.parquet_to_csv import parquet_to_csv
+
+csv_path = parquet_to_csv("path/to/input.parquet", "path/to/output.csv")
+```
+
 ## Development
 
 Install the optional notebook dependencies with `uv sync --locked --group notebooks`.
